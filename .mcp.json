@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "cn-messaging-context": {
+      "cwd": ".",
+      "command": "node",
+      "args": [
+        "./dist/mcp/server.js"
+      ],
+      "env": {
+        "CN_MESSAGING_CONNECTOR_URL": "http://127.0.0.1:8787"
+      }
+    }
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "name": "cn-messaging-context",
+  "version": "0.2.0",
+  "description": "Read, summarize, report on, draft, and safely act on Feishu/Lark and DingTalk messages plus DingTalk OA approvals.",
+  "author": {
+    "name": "Wuliang"
+  },
+  "homepage": "https://github.com/wuliang/cn-messaging-context",
+  "repository": "https://github.com/wuliang/cn-messaging-context",
+  "license": "MIT",
+  "keywords": [
+    "feishu",
+    "dingtalk",
+    "lark",
+    "messaging",
+    "team-context",
+    "approval",
+    "oa"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Feishu / DingTalk Context",
+    "shortDescription": "Search Chinese team chat context and handle safe DingTalk approvals.",
+    "longDescription": "Use Feishu/Lark and DingTalk conversations from a separate connector service to sync history, search messages, summarize recent context, generate group-chat reports, draft replies, send user-confirmed messages, and read or approve DingTalk OA items after explicit confirmation.",
+    "developerName": "Wuliang",
+    "category": "Communication",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/wuliang/cn-messaging-context",
+    "privacyPolicyURL": "https://github.com/wuliang/cn-messaging-context/blob/main/docs/privacy.md",
+    "termsOfServiceURL": "https://github.com/wuliang/cn-messaging-context/blob/main/docs/terms.md",
+    "defaultPrompt": [
+      "总结飞书里昨天关于采购平台的讨论",
+      "从钉钉项目群找最近三天的预算调整消息",
+      "根据群聊上下文起草一条回复，先别发",
+      "看看钉钉 OA 有哪些待审批，先不要通过"
+    ],
+    "brandColor": "#2563EB"
+  }
+}
