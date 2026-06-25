@@ -1,7 +1,7 @@
 {
   "name": "cn-messaging-context",
-  "version": "0.7.0",
-  "description": "Read, summarize, triage, publish, safely act on Feishu/Lark, DingTalk, and Tencent Docs context, with user-approved Feishu reads and GitHub issue reporting.",
+  "version": "0.8.0",
+  "description": "Read, summarize, triage, publish, safely act on Feishu/Lark, DingTalk, and Tencent Docs context, with one-command onboarding, user-approved Feishu reads, and GitHub issue reporting.",
   "author": {
     "name": "Wuliang"
   },
@@ -22,7 +22,7 @@
   "interface": {
     "displayName": "Feishu / DingTalk Context",
     "shortDescription": "Search Chinese team chat context and handle safe DingTalk approvals.",
-    "longDescription": "Use Feishu/Lark, DingTalk, and Tencent Docs resources from a separate connector service to sync history, search messages, summarize recent context, generate Slack-style daily digests, publish summaries to docs/sheets/bases/whiteboards, ask before falling back to user-approved Feishu/Lark read permission, read native mention/unread state, identify reply candidates, draft reply queues, read native or topic-inferred threads, map cross-platform identities, run safe schedule workers, send user-confirmed messages, read or approve DingTalk OA items after explicit confirmation, and turn connector errors into redacted GitHub Issues.",
+    "longDescription": "Use Feishu/Lark, DingTalk, and Tencent Docs resources from a separate connector service to sync history, search messages, summarize recent context, generate Slack-style daily digests, publish summaries to docs/sheets/bases/whiteboards, guide new users through one-command Codex/WorkBuddy installation and platform CLI setup, ask before falling back to user-approved Feishu/Lark read permission, read native mention/unread state, identify reply candidates, draft reply queues, read native or topic-inferred threads, map cross-platform identities, run safe schedule workers, send user-confirmed messages, read or approve DingTalk OA items after explicit confirmation, and turn connector errors into redacted GitHub Issues.",
     "developerName": "Wuliang",
     "category": "Communication",
     "capabilities": [
@@ -51,7 +51,8 @@
       "列出今天真正 @ 我的飞书和钉钉消息",
       "看看钉钉有哪些未读会话",
       "如果机器人看不到这个飞书文档，先问我再用我的账号只读一次",
-      "把刚才的插件错误整理成 GitHub Issue，先预览"
+      "把刚才的插件错误整理成 GitHub Issue，先预览",
+      "帮我一键安装这个插件，并检查飞书、钉钉、腾讯文档依赖"
     ],
     "brandColor": "#2563EB"
   }

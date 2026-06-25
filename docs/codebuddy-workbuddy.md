@@ -12,9 +12,25 @@ CodeBuddy plugin packaging follows the same shape used here:
 
 Build once, then install or reference the package from CodeBuddy according to its plugin installation flow.
 
+New teammates can run:
+
+```bash
+npm run agent:install
+```
+
+The installer prepares the shared build and writes a WorkBuddy MCP config file.
+
 ## WorkBuddy
 
 If WorkBuddy only needs MCP access, use this package as a plain MCP server and keep the connector service running.
+
+The fastest path is:
+
+```bash
+npm run agent:install -- --workbuddy-only
+```
+
+It writes a ready-to-copy MCP config under the plugin data directory.
 
 Example MCP configuration:
 
@@ -49,3 +65,4 @@ npm run start:connector
 - Require explicit user confirmation before `send_message` or `approve_dingtalk_approval`.
 - Keep secrets in the connector deployment environment, never in plugin manifests.
 - Use the Slack-style workflow tools for daily digests, personal triage, reply queues, and summary documents before deciding whether anything should be sent.
+- Use [New User Setup Guide](./onboarding.md) for Feishu/Lark CLI, DingTalk DWS CLI, and Tencent Docs OpenAPI setup.

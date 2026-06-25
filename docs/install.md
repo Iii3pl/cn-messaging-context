@@ -2,6 +2,28 @@
 
 ## Local Codex Plugin
 
+Recommended for new users:
+
+```bash
+git clone https://github.com/Iii3pl/cn-messaging-context
+cd cn-messaging-context
+npm run agent:install
+```
+
+This starts a guided install that prepares Codex and WorkBuddy, checks platform CLIs, and keeps write actions in preview-first mode. See [New User Setup Guide](./onboarding.md).
+
+Useful installer variants:
+
+```bash
+npm run agent:install -- --check-only
+npm run agent:install -- --guide
+npm run agent:install -- --codex-only
+npm run agent:install -- --workbuddy-only
+npm run agent:install -- --install-platform-cli
+```
+
+Manual flow:
+
 1. Build the package:
 
 ```bash
@@ -33,6 +55,7 @@ In plain language: this starts the small local helper service that Codex talks t
 - Grant only the scopes needed for bot membership, message read/search, and message send.
 - Invite the bot to authorized groups.
 - Optional user-approved read fallback: configure Feishu/Lark OAuth user credentials in the connector environment if your deployment supports them. Codex must ask the user before using this path for a one-time group or document read.
+- CLI install for new users: `npx @larksuite/cli@latest install`, then `lark-cli config init`, `lark-cli auth login --recommend`, `lark-cli doctor`.
 
 ### DingTalk
 
@@ -42,6 +65,14 @@ In plain language: this starts the small local helper service that Codex talks t
 - Grant message read/search/send scopes.
 - Grant OA approval read scopes.
 - Grant OA approval action scopes only when the organization has approved Codex-assisted approval actions.
+- CLI install for new users: `npm install -g dingtalk-workspace-cli`, then `dws auth login`, `dws auth status`, `dws doctor`.
+
+### Tencent Docs
+
+- Tencent Docs uses connector-side OpenAPI/OAuth credentials or a tenant MCP bridge.
+- Set `TENCENT_DOCS_ACCESS_TOKEN` and `TENCENT_DOCS_OPEN_ID` in the connector service environment.
+- Optional: `TENCENT_DOCS_CLIENT_ID`, `TENCENT_DOCS_API_BASE`, `TENCENT_DOCS_MCP_TOKEN`.
+- Restart the connector after changing credentials, then run `check_workspace_status`.
 
 ## Runtime Flags
 

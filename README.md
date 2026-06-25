@@ -23,6 +23,20 @@ docs/                         API, architecture, and security notes
 
 ## Local Development
 
+Recommended one-command local install:
+
+```bash
+git clone https://github.com/Iii3pl/cn-messaging-context
+cd cn-messaging-context
+npm run agent:install
+```
+
+The install agent installs dependencies, builds the plugin, starts the small local connector service, installs the Codex personal plugin, and writes a WorkBuddy MCP config file. It keeps write actions in preview-first mode by default.
+
+For teammate onboarding, CLI setup, and first-run checks, see [docs/onboarding.md](./docs/onboarding.md).
+
+Manual development flow:
+
 ```bash
 npm install
 npm run build
