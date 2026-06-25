@@ -6,7 +6,7 @@
 - A stdio MCP server exposes bounded tools to Codex.
 - A separate connector service owns webhooks, token refresh, storage, search, and send adapters.
 
-This keeps long-running platform work out of Codex sessions while still letting Codex sync history, search, summarize, generate group-chat reports, draft, safely send confirmed messages, and read or approve confirmed DingTalk OA items.
+This keeps long-running platform work out of Codex sessions while still letting Codex sync history, search, summarize, generate group-chat reports, create Slack-style daily digests, triage notifications, find reply candidates, draft reply queues, create summary documents, safely send confirmed messages, and read or approve confirmed DingTalk OA items.
 
 ## Structure
 
@@ -41,6 +41,11 @@ Set `CN_MESSAGING_STORE=sqlite` to use the production-style local SQLite store w
 - `get_recent_context`
 - `summarize_conversation`
 - `create_conversation_report`
+- `create_daily_digest`
+- `triage_today`
+- `find_reply_candidates`
+- `draft_reply_queue`
+- `create_summary_doc`
 - `draft_reply`
 - `sync_history`
 - `authorize_conversation`
@@ -53,6 +58,17 @@ Set `CN_MESSAGING_STORE=sqlite` to use the production-style local SQLite store w
 - `check_integration_status`
 
 `send_message` and `approve_dingtalk_approval` require `confirmed_by_user: true` plus a human-readable confirmation summary. The skills also require Codex to show the platform, destination/action target, and exact outgoing text or approval remark before acting.
+
+## Slack-Style Workflows
+
+The plugin includes Slack-inspired workflows adapted for Feishu/Lark and DingTalk:
+
+- Daily digest: cross-conversation summary grouped by topic.
+- Notification triage: tasks for the user, worth-skimming items, and optional low-priority items.
+- Reply drafting: find likely response candidates and prepare draft-only replies.
+- Summary document: Markdown document similar to a Slack Canvas recap.
+
+These workflows operate only on messages already captured or synced into the connector. Use `sync_history` first when live history coverage is required.
 
 ## CodeBuddy / WorkBuddy
 

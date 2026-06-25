@@ -48,3 +48,4 @@ npm run start:connector
 - Enable `CN_MESSAGING_ENFORCE_AUTH=true` for tenant or group-level authorization.
 - Require explicit user confirmation before `send_message` or `approve_dingtalk_approval`.
 - Keep secrets in the connector deployment environment, never in plugin manifests.
+- Use the Slack-style workflow tools for daily digests, personal triage, reply queues, and summary documents before deciding whether anything should be sent.

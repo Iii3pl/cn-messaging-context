@@ -6,6 +6,7 @@ import { appendQuery, jsonText } from "../shared/http.js";
 const connectorUrl = process.env.CN_MESSAGING_CONNECTOR_URL ?? "http://127.0.0.1:8787";
 
 const platformSchema = z.enum(["feishu", "dingtalk"]);
+const timestampSchema = z.string().min(1);
 
 async function connectorRequest(path: string, init?: RequestInit): Promise<unknown> {
   const response = await fetch(new URL(path, connectorUrl), {
@@ -39,7 +40,7 @@ function textResult(value: unknown) {
 
 const server = new McpServer({
   name: "cn-messaging-context",
-  version: "0.1.0"
+  version: "0.3.0"
 });
 
 server.registerTool(
@@ -66,8 +67,8 @@ server.registerTool(
       conversation_id: z.string().optional(),
       query: z.string().optional(),
       sender: z.string().optional(),
-      since: z.string().datetime().optional(),
-      until: z.string().datetime().optional(),
+      since: timestampSchema.optional(),
+      until: timestampSchema.optional(),
       limit: z.number().int().min(1).max(200).default(50)
     }
   },
@@ -97,8 +98,8 @@ server.registerTool(
       platform: platformSchema,
       conversation_id: z.string(),
       query: z.string().optional(),
-      since: z.string().datetime().optional(),
-      until: z.string().datetime().optional(),
+      since: timestampSchema.optional(),
+      until: timestampSchema.optional(),
       limit: z.number().int().min(1).max(200).default(100)
     }
   },
@@ -120,8 +121,8 @@ server.registerTool(
       platform: platformSchema,
       conversation_id: z.string(),
       query: z.string().optional(),
-      since: z.string().datetime().optional(),
-      until: z.string().datetime().optional(),
+      since: timestampSchema.optional(),
+      until: timestampSchema.optional(),
       limit: z.number().int().min(1).max(500).default(200)
     }
   },
@@ -156,6 +157,113 @@ server.registerTool(
     )
 );
 
+const workflowSchema = {
+  platform: platformSchema.optional(),
+  conversation_ids: z.array(z.string()).optional(),
+  topics: z.array(z.string()).optional(),
+  since: timestampSchema.optional(),
+  until: timestampSchema.optional(),
+  limit: z.number().int().min(1).max(1000).default(500)
+};
+
+server.registerTool(
+  "create_daily_digest",
+  {
+    title: "Create daily digest",
+    description: "Create a Slack-style daily digest across selected Feishu or DingTalk conversations or topics.",
+    inputSchema: {
+      ...workflowSchema,
+      include_messages: z.boolean().default(false)
+    }
+  },
+  async (args) =>
+    textResult(
+      await connectorRequest("/workflows/daily-digest", {
+        method: "POST",
+        body: JSON.stringify(args)
+      })
+    )
+);
+
+server.registerTool(
+  "triage_today",
+  {
+    title: "Triage today's messaging",
+    description: "Triage recent Feishu or DingTalk activity into tasks for the user, worth skimming, and optional ignore-now items.",
+    inputSchema: {
+      ...workflowSchema,
+      current_user: z.string().optional(),
+      include_can_ignore: z.boolean().default(false)
+    }
+  },
+  async (args) =>
+    textResult(
+      await connectorRequest("/workflows/notification-triage", {
+        method: "POST",
+        body: JSON.stringify(args)
+      })
+    )
+);
+
+server.registerTool(
+  "find_reply_candidates",
+  {
+    title: "Find reply candidates",
+    description: "Find messages likely requiring a reply, confirmation, or follow-up.",
+    inputSchema: {
+      ...workflowSchema,
+      current_user: z.string().optional()
+    }
+  },
+  async (args) =>
+    textResult(
+      await connectorRequest("/workflows/reply-candidates", {
+        method: "POST",
+        body: JSON.stringify(args)
+      })
+    )
+);
+
+server.registerTool(
+  "draft_reply_queue",
+  {
+    title: "Draft reply queue",
+    description: "Create draft-only replies for messages likely requiring the user's response. This does not send.",
+    inputSchema: {
+      ...workflowSchema,
+      current_user: z.string().optional(),
+      tone: z.string().optional()
+    }
+  },
+  async (args) =>
+    textResult(
+      await connectorRequest("/workflows/draft-reply-queue", {
+        method: "POST",
+        body: JSON.stringify(args)
+      })
+    )
+);
+
+server.registerTool(
+  "create_summary_doc",
+  {
+    title: "Create summary document",
+    description: "Create a Slack Canvas-style Markdown summary document from Feishu or DingTalk activity.",
+    inputSchema: {
+      ...workflowSchema,
+      title: z.string().optional(),
+      current_user: z.string().optional()
+    }
+  },
+  async (args) =>
+    textResult(
+      await connectorRequest("/workflows/summary-doc", {
+        method: "POST",
+        body: JSON.stringify(args)
+      })
+    )
+);
+
 server.registerTool(
   "sync_history",
   {
@@ -165,8 +273,8 @@ server.registerTool(
       platform: platformSchema,
       conversation_id: z.string().optional(),
       query: z.string().optional(),
-      since: z.string().datetime().optional(),
-      until: z.string().datetime().optional(),
+      since: timestampSchema.optional(),
+      until: timestampSchema.optional(),
       limit: z.number().int().min(1).max(200).default(50)
     }
   },

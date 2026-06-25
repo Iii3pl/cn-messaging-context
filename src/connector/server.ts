@@ -194,6 +194,82 @@ app.post("/messages/draft", asyncRoute(async (req, res) => {
   });
 }));
 
+app.post("/workflows/daily-digest", asyncRoute(async (req, res) => {
+  const body = req.body as WorkflowRequest;
+  const messages = await getWorkflowMessages(req, body);
+  const digest = buildDailyDigest(messages, body);
+  await store.appendAudit({
+    action: "workflows.daily_digest",
+    tenant_id: tenantId(req),
+    platform: body.platform,
+    status: "read",
+    metadata: { message_count: messages.length, since: body.since, until: body.until, topics: body.topics }
+  });
+  res.json({ message_count: messages.length, digest, messages: messages.slice(0, body.include_messages ? messages.length : 0) });
+}));
+
+app.post("/workflows/notification-triage", asyncRoute(async (req, res) => {
+  const body = req.body as WorkflowRequest & { current_user?: string; include_can_ignore?: boolean };
+  const messages = await getWorkflowMessages(req, body);
+  const triage = buildNotificationTriage(messages, body.current_user, Boolean(body.include_can_ignore));
+  await store.appendAudit({
+    action: "workflows.notification_triage",
+    tenant_id: tenantId(req),
+    platform: body.platform,
+    status: "read",
+    metadata: { message_count: messages.length, current_user: body.current_user, since: body.since, until: body.until }
+  });
+  res.json({ message_count: messages.length, ...triage });
+}));
+
+app.post("/workflows/reply-candidates", asyncRoute(async (req, res) => {
+  const body = req.body as WorkflowRequest & { current_user?: string };
+  const messages = await getWorkflowMessages(req, body);
+  const candidates = findReplyCandidates(messages, body.current_user).slice(0, body.limit ?? 20);
+  await store.appendAudit({
+    action: "workflows.reply_candidates",
+    tenant_id: tenantId(req),
+    platform: body.platform,
+    status: "read",
+    metadata: { message_count: messages.length, candidates: candidates.length, current_user: body.current_user }
+  });
+  res.json({ message_count: messages.length, candidates });
+}));
+
+app.post("/workflows/draft-reply-queue", asyncRoute(async (req, res) => {
+  const body = req.body as WorkflowRequest & { current_user?: string; tone?: string };
+  const messages = await getWorkflowMessages(req, body);
+  const candidates = findReplyCandidates(messages, body.current_user).slice(0, body.limit ?? 10);
+  const drafts = candidates.map((candidate) => ({
+    candidate,
+    draft: draftCandidateReply(candidate, body.tone)
+  }));
+  res.json({
+    mode: "draft_only",
+    message_count: messages.length,
+    drafts
+  });
+}));
+
+app.post("/workflows/summary-doc", asyncRoute(async (req, res) => {
+  const body = req.body as WorkflowRequest & { title?: string; current_user?: string };
+  const messages = await getWorkflowMessages(req, body);
+  const digest = buildDailyDigest(messages, body);
+  const triage = buildNotificationTriage(messages, body.current_user, false);
+  const candidates = findReplyCandidates(messages, body.current_user).slice(0, 10);
+  const document = buildSummaryDocument({
+    title: body.title,
+    messages,
+    digest,
+    triage,
+    candidates,
+    since: body.since,
+    until: body.until,
+    topics: body.topics
+  });
+  res.json({ message_count: messages.length, document });
+}));
+
 app.post("/messages/send", asyncRoute(async (req, res) => {
   const body = req.body as {
     platform?: Platform;
@@ -452,6 +528,310 @@ function buildConversationReport(messages: MessageRecord[], filters: { since?: s
     "## 风险/异常",
     ...(risks.length > 0 ? risks.map((message) => `- ${message.sender}: ${message.text}`) : ["- 暂未识别到明显风险。"])
   ].join("\n");
+}
+
+interface WorkflowRequest {
+  platform?: Platform;
+  conversation_ids?: string[];
+  topics?: string[];
+  since?: string;
+  until?: string;
+  limit?: number;
+  include_messages?: boolean;
+}
+
+interface ReplyCandidate {
+  platform: Platform;
+  conversation_id: string;
+  conversation_name?: string;
+  message_id: string;
+  sender: string;
+  timestamp: string;
+  text: string;
+  reason: string;
+  priority: "high" | "medium" | "low";
+}
+
+async function getWorkflowMessages(req: express.Request, body: WorkflowRequest): Promise<MessageRecord[]> {
+  const tenant_id = tenantId(req);
+  const limit = Math.min(Math.max(body.limit ?? 500, 1), 1000);
+  const conversationIds = body.conversation_ids?.filter(Boolean);
+  const topicQuery = body.topics?.filter(Boolean).join(" ");
+
+  if (conversationIds && conversationIds.length > 0) {
+    const results: MessageRecord[] = [];
+    for (const conversation_id of conversationIds.slice(0, 30)) {
+      if (body.platform) {
+        await requireAuthorized(req, body.platform, conversation_id);
+      }
+      const messages = await store.searchMessages({
+        tenant_id,
+        platform: body.platform,
+        conversation_id,
+        since: body.since,
+        until: body.until,
+        limit
+      });
+      results.push(...messages);
+    }
+    return filterWorkflowTopics(uniqueMessages(results), body.topics).slice(0, limit);
+  }
+
+  const messages = await store.searchMessages({
+    tenant_id,
+    platform: body.platform,
+    query: body.topics?.length === 1 ? topicQuery : undefined,
+    since: body.since,
+    until: body.until,
+    limit
+  });
+  return filterWorkflowTopics(uniqueMessages(messages), body.topics);
+}
+
+function buildDailyDigest(messages: MessageRecord[], request: WorkflowRequest): string {
+  if (messages.length === 0) {
+    return [
+      `**Daily Messaging Digest - ${dateLabel(request.since)}**`,
+      "**Scope**",
+      `- ${scopeLine(request)}`,
+      "",
+      "**Summary**",
+      "没有找到匹配消息。",
+      "",
+      "**Notes**",
+      "- 可能尚未同步对应平台/群聊的历史消息，或筛选范围过窄。"
+    ].join("\n");
+  }
+
+  const topics = groupTopics(messages);
+  const attention = findAttentionItems(messages).slice(0, 8);
+  const volume = summarizeVolume(messages);
+  return [
+    `**Daily Messaging Digest - ${dateLabel(request.since)}**`,
+    "**Scope**",
+    `- ${scopeLine(request)}`,
+    "",
+    "**Summary**",
+    `${volume}。重点集中在 ${topics.slice(0, 3).map((topic) => topic.name).join("、") || "日常协作"}。`,
+    "",
+    ...topics.slice(0, 4).flatMap((topic) => [
+      `**Topic: ${topic.name}**`,
+      ...topic.messages.slice(0, 4).map((message) => `- ${message.conversation_name ?? message.conversation_id}｜${message.sender}: ${trimText(message.text, 120)}`),
+      ""
+    ]),
+    ...(attention.length > 0
+      ? ["**Needs attention**", ...attention.map((item) => `- ${item.conversation_name ?? item.conversation_id}｜${item.sender}: ${trimText(item.text, 130)}`), ""]
+      : []),
+    "**Notes**",
+    "- 摘要基于连接器当前已入库消息；未同步的群聊或历史窗口不会出现在结果中。"
+  ].join("\n").trim();
+}
+
+function buildNotificationTriage(messages: MessageRecord[], currentUser: string | undefined, includeCanIgnore: boolean): {
+  triage: string;
+  tasks_for_you: MessageRecord[];
+  worth_skimming: MessageRecord[];
+  can_ignore_for_now: MessageRecord[];
+} {
+  const tasks = findAttentionItems(messages)
+    .filter((message) => !currentUser || message.sender !== currentUser)
+    .slice(0, 12);
+  const skim = messages
+    .filter((message) => !tasks.includes(message))
+    .filter((message) => /决定|确认|客户|风险|延期|预算|结算|审批|卡点|反馈|明天|截止/.test(message.text))
+    .slice(0, 10);
+  const ignore = includeCanIgnore
+    ? messages.filter((message) => !tasks.includes(message) && !skim.includes(message)).slice(0, 8)
+    : [];
+
+  const triage = [
+    `**Messaging Notification Triage - ${new Date().toISOString().slice(0, 10)}**`,
+    "**Overview**",
+    tasks.length > 0
+      ? `找到 ${tasks.length} 条可能需要你阅读、回复或跟进的消息。`
+      : "没有识别到明确需要你处理的消息。",
+    "",
+    "**Tasks for you**",
+    ...(tasks.length > 0 ? tasks.map((message) => `- ${formatMessagePointer(message)}：${trimText(message.text, 130)}`) : ["- 暂无明确待处理项。"]),
+    "",
+    "**Worth skimming**",
+    ...(skim.length > 0 ? skim.map((message) => `- ${formatMessagePointer(message)}：${trimText(message.text, 130)}`) : ["- 暂无。"]),
+    ...(includeCanIgnore ? ["", "**Can ignore for now**", ...(ignore.length > 0 ? ignore.map((message) => `- ${formatMessagePointer(message)}：${trimText(message.text, 110)}`) : ["- 暂无。"])] : []),
+    "",
+    "**Notes**",
+    "- 这是基于文本规则和已同步消息的辅助分诊；审批、客户群和财务群建议再看原上下文。"
+  ].join("\n");
+
+  return { triage, tasks_for_you: tasks, worth_skimming: skim, can_ignore_for_now: ignore };
+}
+
+function findReplyCandidates(messages: MessageRecord[], currentUser: string | undefined): ReplyCandidate[] {
+  const sorted = [...messages].sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp));
+  const candidates: ReplyCandidate[] = [];
+  for (const message of sorted) {
+    if (currentUser && message.sender === currentUser) {
+      continue;
+    }
+    const reason = replyReason(message, currentUser);
+    if (!reason) {
+      continue;
+    }
+    candidates.push({
+      platform: message.platform,
+      conversation_id: message.conversation_id,
+      conversation_name: message.conversation_name,
+      message_id: message.message_id,
+      sender: message.sender,
+      timestamp: message.timestamp,
+      text: message.text,
+      reason,
+      priority: /@|紧急|今天|截止|确认|审批|客户|风险|卡点/.test(message.text) ? "high" : "medium"
+    });
+  }
+  return candidates;
+}
+
+function draftCandidateReply(candidate: ReplyCandidate, tone = "简洁、稳妥、职场自然"): string {
+  const prefix = candidate.sender ? `${candidate.sender}，` : "";
+  const action = /确认|是否|吗|？|\?/.test(candidate.text)
+    ? "我确认一下后同步你。"
+    : /风险|问题|卡点|异常|失败|延期/.test(candidate.text)
+      ? "我先看一下具体卡点，稍后给处理建议和下一步安排。"
+      : "收到，我来跟进。";
+  return `${prefix}${action}\n\n我会按当前口径推进，有变化再及时补充。`;
+}
+
+function buildSummaryDocument(input: {
+  title?: string;
+  messages: MessageRecord[];
+  digest: string;
+  triage: ReturnType<typeof buildNotificationTriage>;
+  candidates: ReplyCandidate[];
+  since?: string;
+  until?: string;
+  topics?: string[];
+}): string {
+  const title = input.title ?? `团队消息工作台摘要 ${new Date().toISOString().slice(0, 10)}`;
+  return [
+    `# ${title}`,
+    "",
+    `范围：${input.since ?? "未限定"} 至 ${input.until ?? "未限定"}${input.topics?.length ? `；主题：${input.topics.join("、")}` : ""}`,
+    `消息数：${input.messages.length}`,
+    "",
+    "## 每日摘要",
+    input.digest,
+    "",
+    "## 个人分诊",
+    input.triage.triage,
+    "",
+    "## 待回复候选",
+    ...(input.candidates.length > 0
+      ? input.candidates.map((candidate) => `- [${candidate.priority}] ${candidate.conversation_name ?? candidate.conversation_id}｜${candidate.sender}: ${trimText(candidate.text, 140)}\n  建议回复：${draftCandidateReply(candidate)}`)
+      : ["- 暂无明确待回复候选。"]),
+    "",
+    "## 覆盖说明",
+    "- 本文档由连接器基于已入库消息生成，可复制到飞书文档、钉钉文档或群聊发送草稿。"
+  ].join("\n");
+}
+
+function uniqueMessages(messages: MessageRecord[]): MessageRecord[] {
+  const seen = new Set<string>();
+  const unique: MessageRecord[] = [];
+  for (const message of messages) {
+    const key = `${message.platform}:${message.message_id}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    unique.push(message);
+  }
+  return unique.sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp));
+}
+
+function filterWorkflowTopics(messages: MessageRecord[], topics: string[] | undefined): MessageRecord[] {
+  const filters = topics?.filter(Boolean);
+  if (!filters || filters.length === 0) {
+    return messages;
+  }
+  return messages.filter((message) => filters.some((topic) => `${message.conversation_name ?? ""} ${message.text}`.includes(topic)));
+}
+
+function groupTopics(messages: MessageRecord[]): Array<{ name: string; messages: MessageRecord[] }> {
+  const definitions: Array<{ name: string; pattern: RegExp }> = [
+    { name: "项目/客户推进", pattern: /客户|项目|需求|交付|反馈|执行|对接|规划|合作/ },
+    { name: "内容/短视频/矩阵", pattern: /达人|矩阵|视频|脚本|素材|剪辑|拍摄|小红书|快手|1688|即梦/ },
+    { name: "外协/结算/财务", pattern: /外协|账单|报销|费用|发票|付款|结算|云账户|预算/ },
+    { name: "审批/确认/决策", pattern: /审批|确认|同意|通过|决定|结论|口径/ },
+    { name: "工具/系统/自动化", pattern: /dws|飞书|钉钉|系统|接口|插件|机器人|自动化|token|MCP|CRM/ },
+    { name: "风险/异常/卡点", pattern: /风险|问题|异常|失败|错误|延期|卡点|缺失|超时/ }
+  ];
+  const buckets = definitions.map((definition) => ({
+    name: definition.name,
+    messages: messages.filter((message) => definition.pattern.test(`${message.conversation_name ?? ""} ${message.text}`))
+  })).filter((bucket) => bucket.messages.length > 0);
+
+  const matched = new Set(buckets.flatMap((bucket) => bucket.messages.map((message) => `${message.platform}:${message.message_id}`)));
+  const other = messages.filter((message) => !matched.has(`${message.platform}:${message.message_id}`));
+  if (other.length > 0) {
+    buckets.push({ name: "其他协作动态", messages: other });
+  }
+  return buckets.sort((a, b) => b.messages.length - a.messages.length);
+}
+
+function findAttentionItems(messages: MessageRecord[]): MessageRecord[] {
+  return messages.filter((message) => {
+    const text = message.text;
+    return /@|请|麻烦|需要|确认|看看|处理|跟进|回复|审批|通过|截止|今天|明天|风险|问题|卡点|异常/.test(text);
+  });
+}
+
+function replyReason(message: MessageRecord, currentUser: string | undefined): string | undefined {
+  const text = message.text;
+  if (currentUser && (text.includes(`@${currentUser}`) || text.includes(currentUser))) {
+    return "提到当前用户";
+  }
+  if (/请|麻烦|帮忙|看看|确认|回复|处理|跟进/.test(text)) {
+    return "包含明确请求";
+  }
+  if (/吗|？|\?|是否|能不能|可以不|有没有/.test(text)) {
+    return "包含问题";
+  }
+  if (/审批|通过|同意|结算|付款|报销|风险|卡点/.test(text)) {
+    return "高影响事项可能需要确认";
+  }
+  return undefined;
+}
+
+function summarizeVolume(messages: MessageRecord[]): string {
+  const conversations = new Set(messages.map((message) => `${message.platform}:${message.conversation_id}`));
+  const senders = new Set(messages.map((message) => message.sender));
+  return `共 ${messages.length} 条消息，覆盖 ${conversations.size} 个会话、${senders.size} 位发送者`;
+}
+
+function formatMessagePointer(message: MessageRecord): string {
+  return `${message.timestamp}｜${message.platform}｜${message.conversation_name ?? message.conversation_id}｜${message.sender}`;
+}
+
+function trimText(value: string, length: number): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  return normalized.length > length ? `${normalized.slice(0, length - 1)}…` : normalized;
+}
+
+function dateLabel(value: string | undefined): string {
+  const explicitDate = value?.match(/^\d{4}-\d{2}-\d{2}/)?.[0];
+  return explicitDate ?? new Date().toISOString().slice(0, 10);
+}
+
+function scopeLine(request: WorkflowRequest): string {
+  const parts = [
+    request.platform ? `平台：${request.platform}` : "平台：全部",
+    request.conversation_ids?.length ? `会话：${request.conversation_ids.length} 个` : "会话：已入库范围",
+    `时间：${request.since ?? "未限定"} 至 ${request.until ?? "未限定"}`
+  ];
+  if (request.topics?.length) {
+    parts.push(`主题：${request.topics.join("、")}`);
+  }
+  return parts.join("；");
 }
 
 function optionalString(value: unknown): string | undefined {

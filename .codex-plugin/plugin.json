@@ -1,7 +1,7 @@
 {
   "name": "cn-messaging-context",
-  "version": "0.2.0",
-  "description": "Read, summarize, report on, draft, and safely act on Feishu/Lark and DingTalk messages plus DingTalk OA approvals.",
+  "version": "0.3.0",
+  "description": "Read, summarize, triage, draft, report on, and safely act on Feishu/Lark and DingTalk messages plus DingTalk OA approvals.",
   "author": {
     "name": "Wuliang"
   },
@@ -22,7 +22,7 @@
   "interface": {
     "displayName": "Feishu / DingTalk Context",
     "shortDescription": "Search Chinese team chat context and handle safe DingTalk approvals.",
-    "longDescription": "Use Feishu/Lark and DingTalk conversations from a separate connector service to sync history, search messages, summarize recent context, generate group-chat reports, draft replies, send user-confirmed messages, and read or approve DingTalk OA items after explicit confirmation.",
+    "longDescription": "Use Feishu/Lark and DingTalk conversations from a separate connector service to sync history, search messages, summarize recent context, generate Slack-style daily digests, triage notifications, identify reply candidates, draft reply queues, create summary documents, send user-confirmed messages, and read or approve DingTalk OA items after explicit confirmation.",
     "developerName": "Wuliang",
     "category": "Communication",
     "capabilities": [
@@ -36,6 +36,8 @@
       "总结飞书里昨天关于采购平台的讨论",
       "从钉钉项目群找最近三天的预算调整消息",
       "根据群聊上下文起草一条回复，先别发",
+      "整理今天我需要处理和回复的钉钉消息",
+      "生成今天飞书和钉钉的团队消息 digest",
       "看看钉钉 OA 有哪些待审批，先不要通过"
     ],
     "brandColor": "#2563EB"

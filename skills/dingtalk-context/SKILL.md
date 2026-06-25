@@ -14,7 +14,8 @@ Use this skill for DingTalk message searches, recent-context reads, and conversa
 3. For recent activity, call `get_recent_context` with `platform: "dingtalk"`.
 4. For a bounded recap, call `summarize_conversation` with `platform: "dingtalk"`.
 5. For daily/group reports or "重点消息", call `create_conversation_report` with `platform: "dingtalk"`.
-6. Explain whether the result is based on post-install message capture only or includes imported history.
+6. For cross-group daily digests, notification triage, or reply queues, switch to the daily/triage/reply skills from [../messaging-context/SKILL.md](../messaging-context/SKILL.md).
+7. Explain whether the result is based on post-install message capture only or includes imported history.
 
 ## Output Shape
 

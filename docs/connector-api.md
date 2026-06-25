@@ -104,6 +104,53 @@ Body:
 }
 ```
 
+## Slack-Style Workflow APIs
+
+### `POST /workflows/daily-digest`
+
+Body:
+
+```json
+{
+  "platform": "dingtalk",
+  "conversation_ids": ["cid_xxx"],
+  "topics": ["预算", "交付"],
+  "since": "2026-06-25T00:00:00+08:00",
+  "until": "2026-06-25T18:00:00+08:00",
+  "limit": 500
+}
+```
+
+Returns a compact daily digest grouped by topic, with a "Needs attention" section.
+
+### `POST /workflows/notification-triage`
+
+Body:
+
+```json
+{
+  "platform": "dingtalk",
+  "current_user": "吴亮",
+  "since": "2026-06-25T00:00:00+08:00",
+  "until": "2026-06-25T18:00:00+08:00",
+  "include_can_ignore": true
+}
+```
+
+Returns a priority queue: tasks for the user, worth-skimming items, and optional low-priority items.
+
+### `POST /workflows/reply-candidates`
+
+Finds messages likely requiring a response, confirmation, or follow-up.
+
+### `POST /workflows/draft-reply-queue`
+
+Creates draft-only replies for reply candidates. This does not send messages.
+
+### `POST /workflows/summary-doc`
+
+Returns a Markdown document combining digest, triage, and reply candidates. This is the Feishu/DingTalk equivalent of a Slack Canvas-style recap, but it is returned as Markdown unless another publishing adapter is added.
+
 ## Write API
 
 ### `POST /authorizations/conversations`

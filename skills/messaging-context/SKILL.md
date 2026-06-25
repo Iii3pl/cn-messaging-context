@@ -11,6 +11,10 @@ Use this as the router for Feishu and DingTalk work. Read the relevant context f
 | --- | --- |
 | Feishu/Lark context search and summaries | [../feishu-context/SKILL.md](../feishu-context/SKILL.md) |
 | DingTalk context search and summaries | [../dingtalk-context/SKILL.md](../dingtalk-context/SKILL.md) |
+| Daily digests across channels or topics | [../daily-digest/SKILL.md](../daily-digest/SKILL.md) |
+| Personal notification triage | [../notification-triage/SKILL.md](../notification-triage/SKILL.md) |
+| Find and draft replies | [../reply-drafting/SKILL.md](../reply-drafting/SKILL.md) |
+| Shareable summary documents | [../summary-doc/SKILL.md](../summary-doc/SKILL.md) |
 | Drafting or sending messages | [../message-reply/SKILL.md](../message-reply/SKILL.md) |
 | DingTalk OA approvals | [../approval-workflow/SKILL.md](../approval-workflow/SKILL.md) |
 
@@ -21,6 +25,10 @@ Use this as the router for Feishu and DingTalk work. Read the relevant context f
 - Read recent context for a conversation.
 - Summarize bounded conversation context.
 - Generate structured group-chat reports with key messages, decisions, follow-ups, and risks.
+- Generate Slack-style daily digests across selected conversations or topics.
+- Triage messages into tasks for the user, worth-skimming items, and low-priority items.
+- Find messages likely requiring replies and produce draft-only reply queues.
+- Create Markdown summary documents similar to Slack Canvas summaries.
 - Draft replies from available context.
 - Send a message only after the user confirms the exact platform, destination, and text.
 - Read DingTalk OA approvals and approve only after exact user confirmation.
@@ -41,6 +49,10 @@ Use this as the router for Feishu and DingTalk work. Read the relevant context f
 - Use `get_recent_context` for "latest", "recent", or reply-thread style tasks.
 - Use `summarize_conversation` for bounded summaries.
 - Use `create_conversation_report` when the user asks for a daily report, group report, key messages, decisions, follow-ups, or risks.
+- Use `create_daily_digest` for cross-group daily or weekly digests.
+- Use `triage_today` when the user asks what needs their attention.
+- Use `find_reply_candidates` and `draft_reply_queue` when the user asks what to reply to or wants prepared replies.
+- Use `create_summary_doc` for shareable Markdown summaries.
 - Use `draft_reply` for draft-first tasks.
 - Use `send_message` only through [../message-reply/SKILL.md](../message-reply/SKILL.md).
 - Use DingTalk approval tools only through [../approval-workflow/SKILL.md](../approval-workflow/SKILL.md).

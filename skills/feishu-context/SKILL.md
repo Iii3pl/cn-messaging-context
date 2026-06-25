@@ -41,3 +41,4 @@ Omit empty sections. Keep exact group names, timestamps, owners, and message lin
 - Do not read or infer from unauthorized groups.
 - Do not present connector-local summaries as complete historical truth unless the connector status proves historical sync coverage.
 - If the user asks to reply or send, switch to [../message-reply/SKILL.md](../message-reply/SKILL.md).
+- If the user asks for daily digests, attention triage, reply queues, or summary documents, switch through [../messaging-context/SKILL.md](../messaging-context/SKILL.md).

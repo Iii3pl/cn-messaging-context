@@ -59,6 +59,7 @@ npm run start:connector
 - DingTalk bot events are accepted only with valid signatures when a secret is configured.
 - `sync_history` imports a bounded time window.
 - `create_conversation_report` returns key messages, decisions, follow-ups, and risks.
+- `create_daily_digest`, `triage_today`, `find_reply_candidates`, `draft_reply_queue`, and `create_summary_doc` work from synced or ingested messages.
 - `list_pending_dingtalk_approvals` returns visible OA items.
 - `approve_dingtalk_approval` rejects calls without user confirmation.
 - With dry-run enabled, sends and approvals write audit records but do not call platform write APIs.
