@@ -217,6 +217,104 @@ app.post("/workflows/summary-doc", asyncRoute(async (req, res) => {
     });
     res.json({ message_count: messages.length, document });
 }));
+app.post("/workflows/topic-map", asyncRoute(async (req, res) => {
+    const body = req.body;
+    const messages = await getWorkflowMessages(req, body);
+    const topics = buildTopicMap(messages, body.max_topics ?? 12);
+    await store.appendAudit({
+        action: "workflows.topic_map",
+        tenant_id: tenantId(req),
+        platform: body.platform,
+        status: "read",
+        metadata: { message_count: messages.length, topics: topics.length }
+    });
+    res.json({ message_count: messages.length, topics });
+}));
+app.post("/workflows/topic-thread", asyncRoute(async (req, res) => {
+    const body = req.body;
+    const topic = requireString(body.topic, "topic");
+    const messages = filterMessagesByTopic(await getWorkflowMessages(req, { ...body, topics: undefined }), topic);
+    const thread = buildTopicThread(messages, topic, body.anchor_message_id, body.window_size ?? 8);
+    res.json({ topic, message_count: messages.length, thread });
+}));
+app.post("/schedules/digest", asyncRoute(async (req, res) => {
+    const body = req.body;
+    const scheduledFor = requireString(body.scheduled_for, "scheduled_for");
+    const schedule = await appendScheduled(req, {
+        action: "daily_digest",
+        platform: body.platform,
+        scheduled_for: scheduledFor,
+        payload: {
+            title: body.title,
+            platform: body.platform,
+            conversation_ids: body.conversation_ids,
+            topics: body.topics,
+            since: body.since,
+            until: body.until,
+            limit: body.limit
+        }
+    });
+    res.json({ scheduled: true, schedule });
+}));
+app.post("/schedules/message", asyncRoute(async (req, res) => {
+    const body = req.body;
+    const platform = requirePlatform(body.platform);
+    const conversationId = requireString(body.conversation_id, "conversation_id");
+    const text = requireString(body.text, "text");
+    const scheduledFor = requireString(body.scheduled_for, "scheduled_for");
+    await requireAuthorized(req, platform, conversationId);
+    if (!body.confirmed_by_user) {
+        res.status(400).json({ error: "user_confirmation_required" });
+        return;
+    }
+    const schedule = await appendScheduled(req, {
+        action: "send_message",
+        platform,
+        conversation_id: conversationId,
+        conversation_name: body.conversation_name,
+        scheduled_for: scheduledFor,
+        payload: {
+            text,
+            confirmation_summary: body.confirmation_summary,
+            dry_run_required: dryRunSend
+        }
+    });
+    res.json({ scheduled: true, dry_run_send: dryRunSend, schedule });
+}));
+app.get("/schedules", asyncRoute(async (req, res) => {
+    if (!store.listScheduledActions) {
+        res.json({ schedules: [], mode: "scheduled_store_unavailable" });
+        return;
+    }
+    const status = optionalScheduleStatus(req.query.status);
+    const schedules = await store.listScheduledActions({
+        tenant_id: tenantId(req),
+        status,
+        limit: optionalNumber(req.query.limit, 50)
+    });
+    res.json({ schedules });
+}));
+app.post("/schedules/:id/cancel", asyncRoute(async (req, res) => {
+    const id = requireString(req.params.id, "id");
+    if (!store.cancelScheduledAction) {
+        res.status(501).json({ error: "scheduled_store_unavailable" });
+        return;
+    }
+    const schedule = await store.cancelScheduledAction({ tenant_id: tenantId(req), id });
+    if (!schedule) {
+        res.status(404).json({ error: "scheduled_action_not_found" });
+        return;
+    }
+    await store.appendAudit({
+        action: "schedules.cancel",
+        tenant_id: tenantId(req),
+        platform: schedule.platform,
+        conversation_id: schedule.conversation_id,
+        status: "cancelled",
+        metadata: { schedule_id: schedule.id, scheduled_action: schedule.action }
+    });
+    res.json({ cancelled: true, schedule });
+}));
 app.post("/messages/send", asyncRoute(async (req, res) => {
     const body = req.body;
     const platform = requirePlatform(body.platform);
@@ -594,6 +692,72 @@ function buildSummaryDocument(input) {
         "- 本文档由连接器基于已入库消息生成，可复制到飞书文档、钉钉文档或群聊发送草稿。"
     ].join("\n");
 }
+function buildTopicMap(messages, maxTopics) {
+    const topics = groupTopics(messages).slice(0, Math.min(Math.max(maxTopics, 1), 20));
+    return topics.map((topic) => {
+        const sorted = [...topic.messages].sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp));
+        const conversations = [...new Set(sorted.map((message) => message.conversation_name ?? message.conversation_id))].slice(0, 8);
+        return {
+            topic: topic.name,
+            message_count: sorted.length,
+            conversations,
+            latest_timestamp: sorted[0]?.timestamp,
+            summary: `${topic.name} 相关 ${sorted.length} 条消息，主要出现在 ${conversations.join("、") || "未知会话"}。`,
+            sample_messages: sorted.slice(0, 5).map((message) => ({
+                timestamp: message.timestamp,
+                sender: message.sender,
+                text: trimText(message.text, 180),
+                conversation_name: message.conversation_name,
+                conversation_id: message.conversation_id
+            }))
+        };
+    });
+}
+function buildTopicThread(messages, topic, anchorMessageId, windowSize) {
+    if (messages.length === 0) {
+        return `# Topic Thread: ${topic}\n\n没有找到匹配消息。`;
+    }
+    const sorted = [...messages].sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
+    const anchorIndex = anchorMessageId ? sorted.findIndex((message) => message.message_id === anchorMessageId) : -1;
+    const safeWindow = Math.min(Math.max(windowSize, 3), 30);
+    const start = anchorIndex >= 0 ? Math.max(0, anchorIndex - safeWindow) : 0;
+    const end = anchorIndex >= 0 ? Math.min(sorted.length, anchorIndex + safeWindow + 1) : Math.min(sorted.length, safeWindow * 2);
+    const windowMessages = sorted.slice(start, end);
+    const decisions = windowMessages.filter((message) => /决定|确认|同意|通过|口径|结论|安排/.test(message.text));
+    const blockers = windowMessages.filter((message) => /风险|问题|异常|失败|错误|延期|卡点|缺失|超时/.test(message.text));
+    return [
+        `# Topic Thread: ${topic}`,
+        "",
+        `消息数：${messages.length}，当前窗口：${windowMessages.length} 条${anchorMessageId ? `，锚点：${anchorMessageId}` : ""}`,
+        "",
+        "## Timeline",
+        ...windowMessages.map((message) => `- ${message.timestamp}｜${message.conversation_name ?? message.conversation_id}｜${message.sender}: ${trimText(message.text, 220)}`),
+        "",
+        "## Decisions",
+        ...(decisions.length > 0 ? decisions.map((message) => `- ${message.sender}: ${trimText(message.text, 180)}`) : ["- 暂未识别到明确决策。"]),
+        "",
+        "## Blockers",
+        ...(blockers.length > 0 ? blockers.map((message) => `- ${message.sender}: ${trimText(message.text, 180)}`) : ["- 暂未识别到明确卡点。"])
+    ].join("\n");
+}
+async function appendScheduled(req, input) {
+    if (!store.appendScheduledAction) {
+        throw new Error("scheduled_store_unavailable");
+    }
+    const schedule = await store.appendScheduledAction({
+        tenant_id: tenantId(req),
+        ...input
+    });
+    await store.appendAudit({
+        action: `schedules.${input.action}.create`,
+        tenant_id: tenantId(req),
+        platform: input.platform,
+        conversation_id: input.conversation_id,
+        status: "scheduled",
+        metadata: { schedule_id: schedule.id, scheduled_for: input.scheduled_for }
+    });
+    return schedule;
+}
 function uniqueMessages(messages) {
     const seen = new Set();
     const unique = [];
@@ -612,7 +776,7 @@ function filterWorkflowTopics(messages, topics) {
     if (!filters || filters.length === 0) {
         return messages;
     }
-    return messages.filter((message) => filters.some((topic) => `${message.conversation_name ?? ""} ${message.text}`.includes(topic)));
+    return messages.filter((message) => filters.some((topic) => messageMatchesTopic(message, topic)));
 }
 function groupTopics(messages) {
     const definitions = [
@@ -633,6 +797,24 @@ function groupTopics(messages) {
         buckets.push({ name: "其他协作动态", messages: other });
     }
     return buckets.sort((a, b) => b.messages.length - a.messages.length);
+}
+function filterMessagesByTopic(messages, topic) {
+    return messages.filter((message) => messageMatchesTopic(message, topic));
+}
+function messageMatchesTopic(message, topic) {
+    const haystack = `${message.conversation_name ?? ""} ${message.text}`;
+    if (haystack.includes(topic)) {
+        return true;
+    }
+    const aliases = [
+        { topic: /项目|客户|交付|需求/, pattern: /客户|项目|需求|交付|反馈|执行|对接|规划|合作/ },
+        { topic: /内容|短视频|矩阵|达人|脚本/, pattern: /达人|矩阵|视频|脚本|素材|剪辑|拍摄|小红书|快手|1688|即梦/ },
+        { topic: /外协|结算|财务|报销|预算/, pattern: /外协|账单|报销|费用|发票|付款|结算|云账户|预算/ },
+        { topic: /审批|确认|决策/, pattern: /审批|确认|同意|通过|决定|结论|口径/ },
+        { topic: /工具|系统|自动化|dws|MCP|机器人/, pattern: /dws|飞书|钉钉|系统|接口|插件|机器人|自动化|token|MCP|CRM/ },
+        { topic: /风险|异常|卡点|问题|延期|阻塞/, pattern: /风险|问题|异常|失败|错误|延期|卡点|缺失|超时/ }
+    ];
+    return aliases.some((alias) => alias.topic.test(topic) && alias.pattern.test(haystack));
 }
 function findAttentionItems(messages) {
     return messages.filter((message) => {
@@ -715,6 +897,12 @@ async function requireAuthorized(req, platform, conversationId) {
 }
 function optionalPlatform(value) {
     if (value === "feishu" || value === "dingtalk") {
+        return value;
+    }
+    return undefined;
+}
+function optionalScheduleStatus(value) {
+    if (value === "pending" || value === "cancelled" || value === "completed") {
         return value;
     }
     return undefined;

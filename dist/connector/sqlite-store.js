@@ -51,6 +51,18 @@ export class SqliteStore {
         status TEXT NOT NULL,
         metadata TEXT
       );
+      CREATE TABLE IF NOT EXISTS scheduled_actions (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT,
+        action TEXT NOT NULL,
+        platform TEXT,
+        conversation_id TEXT,
+        conversation_name TEXT,
+        scheduled_for TEXT NOT NULL,
+        status TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        payload TEXT NOT NULL
+      );
     `);
         try {
             this.db.exec(`
@@ -199,6 +211,55 @@ export class SqliteStore {
         const row = db.prepare("SELECT COUNT(*) AS count FROM audit_events").get();
         return row.count;
     }
+    async appendScheduledAction(record) {
+        const db = await this.database();
+        const scheduled = {
+            id: crypto.randomUUID(),
+            created_at: new Date().toISOString(),
+            status: "pending",
+            ...record
+        };
+        db.prepare(`
+      INSERT INTO scheduled_actions (
+        id, tenant_id, action, platform, conversation_id, conversation_name,
+        scheduled_for, status, created_at, payload
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(scheduled.id, scheduled.tenant_id ?? null, scheduled.action, scheduled.platform ?? null, scheduled.conversation_id ?? null, scheduled.conversation_name ?? null, scheduled.scheduled_for, scheduled.status, scheduled.created_at, JSON.stringify(scheduled.payload));
+        return scheduled;
+    }
+    async listScheduledActions(filters) {
+        const db = await this.database();
+        const clauses = [];
+        const params = [];
+        if (filters.tenant_id) {
+            clauses.push("tenant_id = ?");
+            params.push(filters.tenant_id);
+        }
+        if (filters.status) {
+            clauses.push("status = ?");
+            params.push(filters.status);
+        }
+        const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
+        const rows = db.prepare(`
+      SELECT * FROM scheduled_actions
+      ${where}
+      ORDER BY scheduled_for ASC
+      LIMIT ?
+    `).all(...params, filters.limit ?? 50);
+        return rows.map(rowToScheduledAction);
+    }
+    async cancelScheduledAction(filters) {
+        const db = await this.database();
+        const clauses = ["id = ?"];
+        const params = [filters.id];
+        if (filters.tenant_id) {
+            clauses.push("tenant_id = ?");
+            params.push(filters.tenant_id);
+        }
+        db.prepare(`UPDATE scheduled_actions SET status = 'cancelled' WHERE ${clauses.join(" AND ")}`).run(...params);
+        const row = db.prepare(`SELECT * FROM scheduled_actions WHERE ${clauses.join(" AND ")}`).get(...params);
+        return row ? rowToScheduledAction(row) : undefined;
+    }
     async database() {
         await this.ensure();
         if (!this.db) {
@@ -220,6 +281,20 @@ function rowToMessage(row) {
         timestamp: row.timestamp,
         raw_payload: row.raw_payload ? JSON.parse(row.raw_payload) : undefined,
         context_summary: row.context_summary ?? undefined
+    };
+}
+function rowToScheduledAction(row) {
+    return {
+        id: row.id,
+        tenant_id: row.tenant_id ?? undefined,
+        action: row.action,
+        platform: row.platform ?? undefined,
+        conversation_id: row.conversation_id ?? undefined,
+        conversation_name: row.conversation_name ?? undefined,
+        scheduled_for: row.scheduled_for,
+        status: row.status,
+        created_at: row.created_at,
+        payload: JSON.parse(row.payload)
     };
 }
 function tenantIdOf(value) {

@@ -30,6 +30,18 @@ export interface AuditEvent {
     status: string;
     metadata?: Record<string, unknown>;
 }
+export interface ScheduledActionRecord {
+    id: string;
+    tenant_id?: string;
+    action: "daily_digest" | "send_message";
+    platform?: Platform;
+    conversation_id?: string;
+    conversation_name?: string;
+    scheduled_for: string;
+    status: "pending" | "cancelled" | "completed";
+    created_at: string;
+    payload: Record<string, unknown>;
+}
 export interface ApprovalRecord {
     platform: "dingtalk";
     instance_id: string;

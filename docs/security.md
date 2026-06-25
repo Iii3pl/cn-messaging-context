@@ -10,6 +10,15 @@
 - Redact message payloads in operational logs unless explicitly needed for debugging in a secure environment.
 - Deduplicate webhook events by `platform + message_id` to avoid repeated storage or repeated actions.
 
+## Schedule Safety
+
+Scheduled digests and messages are stored as pending records only. This package does not start a hidden background sender. Production workers must:
+
+- Re-check permissions and destination before execution.
+- Preserve the original confirmation summary for scheduled messages.
+- Keep broad mentions and high-impact groups behind explicit review.
+- Mark execution result in audit logs.
+
 ## Approval Safety
 
 For DingTalk OA approvals:

@@ -1,4 +1,4 @@
-import type { AuditEvent, ConversationRecord, MessageRecord, Platform } from "../shared/types.js";
+import type { AuditEvent, ConversationRecord, MessageRecord, Platform, ScheduledActionRecord } from "../shared/types.js";
 import type { MessageStore } from "./store.js";
 export declare class SqliteStore implements MessageStore {
     private readonly dataDir;
@@ -39,5 +39,15 @@ export declare class SqliteStore implements MessageStore {
     }): Promise<boolean>;
     appendAudit(event: Omit<AuditEvent, "id" | "timestamp">): Promise<AuditEvent>;
     auditCount(): Promise<number>;
+    appendScheduledAction(record: Omit<ScheduledActionRecord, "id" | "created_at" | "status">): Promise<ScheduledActionRecord>;
+    listScheduledActions(filters: {
+        tenant_id?: string;
+        status?: ScheduledActionRecord["status"];
+        limit?: number;
+    }): Promise<ScheduledActionRecord[]>;
+    cancelScheduledAction(filters: {
+        tenant_id?: string;
+        id: string;
+    }): Promise<ScheduledActionRecord | undefined>;
     private database;
 }

@@ -32,7 +32,7 @@ function textResult(value) {
 }
 const server = new McpServer({
     name: "cn-messaging-context",
-    version: "0.3.0"
+    version: "0.4.0"
 });
 server.registerTool("list_conversations", {
     title: "List conversations",
@@ -174,6 +174,81 @@ server.registerTool("create_summary_doc", {
 }, async (args) => textResult(await connectorRequest("/workflows/summary-doc", {
     method: "POST",
     body: JSON.stringify(args)
+})));
+server.registerTool("map_conversation_topics", {
+    title: "Map conversation topics",
+    description: "Build a Slack-thread-like topic map from synced Feishu or DingTalk messages.",
+    inputSchema: {
+        ...workflowSchema,
+        max_topics: z.number().int().min(1).max(20).default(12)
+    }
+}, async (args) => textResult(await connectorRequest("/workflows/topic-map", {
+    method: "POST",
+    body: JSON.stringify(args)
+})));
+server.registerTool("read_topic_thread", {
+    title: "Read topic thread",
+    description: "Read a bounded topic-centered message timeline with decisions and blockers, similar to a Slack thread summary.",
+    inputSchema: {
+        ...workflowSchema,
+        topic: z.string().min(1),
+        anchor_message_id: z.string().optional(),
+        window_size: z.number().int().min(3).max(30).default(8)
+    }
+}, async (args) => textResult(await connectorRequest("/workflows/topic-thread", {
+    method: "POST",
+    body: JSON.stringify(args)
+})));
+server.registerTool("schedule_daily_digest", {
+    title: "Schedule daily digest",
+    description: "Create a pending schedule record for a future daily digest. This does not run in the background by itself.",
+    inputSchema: {
+        ...workflowSchema,
+        scheduled_for: timestampSchema,
+        title: z.string().optional()
+    }
+}, async (args) => textResult(await connectorRequest("/schedules/digest", {
+    method: "POST",
+    body: JSON.stringify(args)
+})));
+server.registerTool("schedule_message", {
+    title: "Schedule confirmed message",
+    description: "Create a pending schedule record for a Feishu or DingTalk message after explicit user confirmation. This does not send immediately.",
+    inputSchema: {
+        platform: platformSchema,
+        conversation_id: z.string(),
+        conversation_name: z.string().optional(),
+        text: z.string().min(1),
+        scheduled_for: timestampSchema,
+        confirmed_by_user: z.boolean(),
+        confirmation_summary: z.string().min(10)
+    }
+}, async (args) => {
+    if (!args.confirmed_by_user) {
+        throw new Error("schedule_message requires confirmed_by_user=true after user confirmation.");
+    }
+    return textResult(await connectorRequest("/schedules/message", {
+        method: "POST",
+        body: JSON.stringify(args)
+    }));
+});
+server.registerTool("list_scheduled_actions", {
+    title: "List scheduled actions",
+    description: "List pending, cancelled, or completed digest/message schedule records.",
+    inputSchema: {
+        status: z.enum(["pending", "cancelled", "completed"]).optional(),
+        limit: z.number().int().min(1).max(200).default(50)
+    }
+}, async (args) => textResult(await connectorRequest(appendQuery("/schedules", args))));
+server.registerTool("cancel_scheduled_action", {
+    title: "Cancel scheduled action",
+    description: "Cancel a pending digest or message schedule record.",
+    inputSchema: {
+        id: z.string().min(1)
+    }
+}, async (args) => textResult(await connectorRequest(`/schedules/${encodeURIComponent(args.id)}/cancel`, {
+    method: "POST",
+    body: JSON.stringify({})
 })));
 server.registerTool("sync_history", {
     title: "Sync platform history",

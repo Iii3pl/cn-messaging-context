@@ -7,6 +7,7 @@ The connector writes audit events for:
 - Message send requests.
 - DingTalk OA pending-list reads.
 - DingTalk OA approval actions.
+- Scheduled digest and message record creation/cancellation.
 
 Each audit event includes:
 
@@ -18,6 +19,7 @@ Each audit event includes:
 - `conversation_id` when relevant
 - `status`
 - metadata such as message counts, task ids, confirmation summaries, and text length
+- scheduled action ids and scheduled execution times
 
 Audit records intentionally avoid storing platform secrets or full access tokens.
 

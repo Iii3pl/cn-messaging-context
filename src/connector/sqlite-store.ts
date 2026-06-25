@@ -1,7 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
-import type { AuditEvent, ConversationRecord, MessageRecord, Platform } from "../shared/types.js";
+import type { AuditEvent, ConversationRecord, MessageRecord, Platform, ScheduledActionRecord } from "../shared/types.js";
 import type { MessageStore } from "./store.js";
 
 type DatabaseSync = {
@@ -62,6 +62,18 @@ export class SqliteStore implements MessageStore {
         timestamp TEXT NOT NULL,
         status TEXT NOT NULL,
         metadata TEXT
+      );
+      CREATE TABLE IF NOT EXISTS scheduled_actions (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT,
+        action TEXT NOT NULL,
+        platform TEXT,
+        conversation_id TEXT,
+        conversation_name TEXT,
+        scheduled_for TEXT NOT NULL,
+        status TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        payload TEXT NOT NULL
       );
     `);
 
@@ -256,6 +268,69 @@ export class SqliteStore implements MessageStore {
     return row.count;
   }
 
+  async appendScheduledAction(record: Omit<ScheduledActionRecord, "id" | "created_at" | "status">): Promise<ScheduledActionRecord> {
+    const db = await this.database();
+    const scheduled: ScheduledActionRecord = {
+      id: crypto.randomUUID(),
+      created_at: new Date().toISOString(),
+      status: "pending",
+      ...record
+    };
+    db.prepare(`
+      INSERT INTO scheduled_actions (
+        id, tenant_id, action, platform, conversation_id, conversation_name,
+        scheduled_for, status, created_at, payload
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      scheduled.id,
+      scheduled.tenant_id ?? null,
+      scheduled.action,
+      scheduled.platform ?? null,
+      scheduled.conversation_id ?? null,
+      scheduled.conversation_name ?? null,
+      scheduled.scheduled_for,
+      scheduled.status,
+      scheduled.created_at,
+      JSON.stringify(scheduled.payload)
+    );
+    return scheduled;
+  }
+
+  async listScheduledActions(filters: { tenant_id?: string; status?: ScheduledActionRecord["status"]; limit?: number }): Promise<ScheduledActionRecord[]> {
+    const db = await this.database();
+    const clauses: string[] = [];
+    const params: unknown[] = [];
+    if (filters.tenant_id) {
+      clauses.push("tenant_id = ?");
+      params.push(filters.tenant_id);
+    }
+    if (filters.status) {
+      clauses.push("status = ?");
+      params.push(filters.status);
+    }
+    const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
+    const rows = db.prepare(`
+      SELECT * FROM scheduled_actions
+      ${where}
+      ORDER BY scheduled_for ASC
+      LIMIT ?
+    `).all(...params, filters.limit ?? 50) as SqlScheduledRow[];
+    return rows.map(rowToScheduledAction);
+  }
+
+  async cancelScheduledAction(filters: { tenant_id?: string; id: string }): Promise<ScheduledActionRecord | undefined> {
+    const db = await this.database();
+    const clauses = ["id = ?"];
+    const params: unknown[] = [filters.id];
+    if (filters.tenant_id) {
+      clauses.push("tenant_id = ?");
+      params.push(filters.tenant_id);
+    }
+    db.prepare(`UPDATE scheduled_actions SET status = 'cancelled' WHERE ${clauses.join(" AND ")}`).run(...params);
+    const row = db.prepare(`SELECT * FROM scheduled_actions WHERE ${clauses.join(" AND ")}`).get(...params) as SqlScheduledRow | undefined;
+    return row ? rowToScheduledAction(row) : undefined;
+  }
+
   private async database(): Promise<DatabaseSync> {
     await this.ensure();
     if (!this.db) {
@@ -279,6 +354,19 @@ interface SqlMessageRow {
   context_summary?: string | null;
 }
 
+interface SqlScheduledRow {
+  id: string;
+  tenant_id?: string | null;
+  action: ScheduledActionRecord["action"];
+  platform?: Platform | null;
+  conversation_id?: string | null;
+  conversation_name?: string | null;
+  scheduled_for: string;
+  status: ScheduledActionRecord["status"];
+  created_at: string;
+  payload: string;
+}
+
 function rowToMessage(row: SqlMessageRow): MessageRecord {
   return {
     tenant_id: row.tenant_id,
@@ -292,6 +380,21 @@ function rowToMessage(row: SqlMessageRow): MessageRecord {
     timestamp: row.timestamp,
     raw_payload: row.raw_payload ? JSON.parse(row.raw_payload) : undefined,
     context_summary: row.context_summary ?? undefined
+  };
+}
+
+function rowToScheduledAction(row: SqlScheduledRow): ScheduledActionRecord {
+  return {
+    id: row.id,
+    tenant_id: row.tenant_id ?? undefined,
+    action: row.action,
+    platform: row.platform ?? undefined,
+    conversation_id: row.conversation_id ?? undefined,
+    conversation_name: row.conversation_name ?? undefined,
+    scheduled_for: row.scheduled_for,
+    status: row.status,
+    created_at: row.created_at,
+    payload: JSON.parse(row.payload) as Record<string, unknown>
   };
 }
 

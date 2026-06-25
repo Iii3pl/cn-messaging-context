@@ -6,7 +6,7 @@
 - A stdio MCP server exposes bounded tools to Codex.
 - A separate connector service owns webhooks, token refresh, storage, search, and send adapters.
 
-This keeps long-running platform work out of Codex sessions while still letting Codex sync history, search, summarize, generate group-chat reports, create Slack-style daily digests, triage notifications, find reply candidates, draft reply queues, create summary documents, safely send confirmed messages, and read or approve confirmed DingTalk OA items.
+This keeps long-running platform work out of Codex sessions while still letting Codex sync history, search, summarize, generate group-chat reports, create Slack-style daily digests, triage notifications, find reply candidates, draft reply queues, create summary documents, map topic threads, create safe schedule records, safely send confirmed messages, and read or approve confirmed DingTalk OA items.
 
 ## Structure
 
@@ -46,6 +46,12 @@ Set `CN_MESSAGING_STORE=sqlite` to use the production-style local SQLite store w
 - `find_reply_candidates`
 - `draft_reply_queue`
 - `create_summary_doc`
+- `map_conversation_topics`
+- `read_topic_thread`
+- `schedule_daily_digest`
+- `schedule_message`
+- `list_scheduled_actions`
+- `cancel_scheduled_action`
 - `draft_reply`
 - `sync_history`
 - `authorize_conversation`
@@ -67,8 +73,12 @@ The plugin includes Slack-inspired workflows adapted for Feishu/Lark and DingTal
 - Notification triage: tasks for the user, worth-skimming items, and optional low-priority items.
 - Reply drafting: find likely response candidates and prepare draft-only replies.
 - Summary document: Markdown document similar to a Slack Canvas recap.
+- Topic map/thread: group messages into topic-centered timelines with decisions and blockers.
+- Scheduled workflows: create pending records for future digests or confirmed messages.
 
 These workflows operate only on messages already captured or synced into the connector. Use `sync_history` first when live history coverage is required.
+
+Scheduled records are not a background runner by themselves. Production deployments should add a worker that reads pending records, regenerates the digest or message at execution time, and still preserves the send/approval confirmation model.
 
 ## CodeBuddy / WorkBuddy
 

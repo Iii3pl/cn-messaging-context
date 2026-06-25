@@ -60,6 +60,8 @@ npm run start:connector
 - `sync_history` imports a bounded time window.
 - `create_conversation_report` returns key messages, decisions, follow-ups, and risks.
 - `create_daily_digest`, `triage_today`, `find_reply_candidates`, `draft_reply_queue`, and `create_summary_doc` work from synced or ingested messages.
+- `map_conversation_topics` and `read_topic_thread` return topic-centered timelines.
+- `schedule_daily_digest`, `schedule_message`, `list_scheduled_actions`, and `cancel_scheduled_action` create and manage schedule records without background execution.
 - `list_pending_dingtalk_approvals` returns visible OA items.
 - `approve_dingtalk_approval` rejects calls without user confirmation.
 - With dry-run enabled, sends and approvals write audit records but do not call platform write APIs.

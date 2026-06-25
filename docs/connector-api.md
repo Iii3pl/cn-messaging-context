@@ -151,6 +151,55 @@ Creates draft-only replies for reply candidates. This does not send messages.
 
 Returns a Markdown document combining digest, triage, and reply candidates. This is the Feishu/DingTalk equivalent of a Slack Canvas-style recap, but it is returned as Markdown unless another publishing adapter is added.
 
+### `POST /workflows/topic-map`
+
+Builds a topic map from normalized messages. This is the Feishu/DingTalk equivalent of looking across Slack threads, but it is inferred from message text unless a platform-specific thread id exists.
+
+### `POST /workflows/topic-thread`
+
+Body:
+
+```json
+{
+  "platform": "dingtalk",
+  "topic": "外协结算",
+  "since": "2026-06-25T00:00:00+08:00",
+  "until": "2026-06-25T18:00:00+08:00",
+  "window_size": 8
+}
+```
+
+Returns a bounded timeline with decisions and blockers for the selected topic.
+
+## Schedule APIs
+
+### `POST /schedules/digest`
+
+Creates a pending schedule record for a future digest. This does not run in the background by itself.
+
+### `POST /schedules/message`
+
+Creates a pending schedule record for a confirmed future message. Requires:
+
+```json
+{
+  "platform": "dingtalk",
+  "conversation_id": "cid_xxx",
+  "text": "明天请同步进度。",
+  "scheduled_for": "2026-06-26T18:00:00+08:00",
+  "confirmed_by_user": true,
+  "confirmation_summary": "User confirmed destination, time, and exact text."
+}
+```
+
+### `GET /schedules`
+
+Lists scheduled action records.
+
+### `POST /schedules/:id/cancel`
+
+Cancels a scheduled action record.
+
 ## Write API
 
 ### `POST /authorizations/conversations`

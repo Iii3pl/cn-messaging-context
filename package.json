@@ -1,9 +1,9 @@
 {
   "name": "cn-messaging-context",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
-  "description": "Codex plugin, MCP server, and connector service for Feishu, Lark, DingTalk messages, Slack-style digests, triage, replies, and DingTalk OA approvals.",
+  "description": "Codex plugin, MCP server, and connector service for Feishu, Lark, DingTalk messages, Slack-style topics, schedules, digests, triage, replies, and DingTalk OA approvals.",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev:mcp": "tsx src/mcp/server.ts",

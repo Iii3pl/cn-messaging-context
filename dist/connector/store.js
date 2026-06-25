@@ -6,15 +6,18 @@ export class JsonlStore {
     mode = "jsonl";
     messagePath;
     auditPath;
+    scheduledPath;
     constructor(dataDir) {
         this.dataDir = dataDir;
         this.messagePath = path.join(dataDir, "messages.jsonl");
         this.auditPath = path.join(dataDir, "audit.jsonl");
+        this.scheduledPath = path.join(dataDir, "scheduled-actions.jsonl");
     }
     async ensure() {
         await mkdir(this.dataDir, { recursive: true });
         await this.ensureFile(this.messagePath);
         await this.ensureFile(this.auditPath);
+        await this.ensureFile(this.scheduledPath);
     }
     async appendMessage(record) {
         await this.ensure();
@@ -90,6 +93,36 @@ export class JsonlStore {
         };
         await this.appendJsonl(this.auditPath, record);
         return record;
+    }
+    async appendScheduledAction(record) {
+        await this.ensure();
+        const scheduled = {
+            id: crypto.randomUUID(),
+            created_at: new Date().toISOString(),
+            status: "pending",
+            ...record
+        };
+        await this.appendJsonl(this.scheduledPath, scheduled);
+        return scheduled;
+    }
+    async listScheduledActions(filters) {
+        await this.ensure();
+        return (await this.readJsonl(this.scheduledPath))
+            .filter((record) => !filters.tenant_id || record.tenant_id === filters.tenant_id)
+            .filter((record) => !filters.status || record.status === filters.status)
+            .sort((a, b) => Date.parse(a.scheduled_for) - Date.parse(b.scheduled_for))
+            .slice(0, filters.limit ?? 50);
+    }
+    async cancelScheduledAction(filters) {
+        await this.ensure();
+        const records = await this.readJsonl(this.scheduledPath);
+        const index = records.findIndex((record) => record.id === filters.id && (!filters.tenant_id || record.tenant_id === filters.tenant_id));
+        if (index < 0) {
+            return undefined;
+        }
+        records[index] = { ...records[index], status: "cancelled" };
+        await writeFile(this.scheduledPath, records.map((record) => JSON.stringify(record)).join("\n") + "\n");
+        return records[index];
     }
     async auditCount() {
         await this.ensure();
