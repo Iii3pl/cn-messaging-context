@@ -9,8 +9,10 @@ flowchart LR
   MCP --> API["Connector service API"]
   API --> Store["Message store, authorization, and audit log"]
   API --> Feishu["Feishu app / bot"]
+  API --> FeishuUser["Feishu user-approved read"]
   API --> DingTalk["DingTalk app / bot / OA"]
   API --> Tencent["Tencent Docs OpenAPI / MCP bridge"]
+  API --> GitHub["GitHub Issues"]
   Feishu --> Webhooks["Webhook receivers"]
   DingTalk --> Webhooks
   Webhooks --> API
@@ -25,10 +27,12 @@ flowchart LR
 - Group-chat reports: extract key messages, decisions, follow-ups, and risks from bounded message windows. The structure is inspired by chat-report workflows such as `wetrace-skill`.
 - Slack-style workflows: daily digest, notification triage, reply candidate detection, draft reply queues, and Markdown summary documents are implemented above the normalized message store so they can work across Feishu/Lark and DingTalk.
 - Workspace document layer: summaries and structured data can be published to Feishu/Lark docs/sheets/Base/whiteboards, DingTalk docs/sheets/AI tables, and Tencent Docs resources through connector-side credentials. Writes are dry-run by default.
+- Feishu/Lark user read fallback: bot/app access stays first. If it cannot read a group or workspace resource, Codex asks the user before retrying through user permission for that one read.
 - Native notification state: platform-native @me, unread conversation/feed, and read-status surfaces are exposed separately from text-based triage so Codex can label evidence correctly.
 - Native/thread layer: the connector preserves platform thread/root/parent ids when adapters expose them, and falls back to inferred topic-centered timelines when native ids are unavailable.
 - Identity layer: Feishu/Lark and DingTalk user ids, display names, and aliases can be mapped to one canonical person so triage and reply workflows behave more like Slack's user-aware notification surfaces.
 - Schedule layer: scheduled digests and messages are stored as pending records. A worker can call `run_due_scheduled_actions` to preview or execute due records while keeping final sends behind explicit confirmation/audit policy.
+- Issue-reporting agent: connector errors can be turned into redacted GitHub Issues. Real automatic creation requires explicit runtime flags; preview mode is the default.
 
 ## Why This Matches the Slack Pattern
 

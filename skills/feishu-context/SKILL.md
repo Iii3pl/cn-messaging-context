@@ -15,6 +15,17 @@ Use this skill for Feishu/Lark message searches, recent-context reads, and conve
 4. For summary requests, call `summarize_conversation` with `platform: "feishu"` and the bounded time/topic scope.
 5. Report the result with clear caveats when the connector returned sparse or partial data.
 
+## User Permission Fallback
+
+If Feishu/Lark says the bot or app cannot read a group, message, or document, ask the user in plain language before trying user permission:
+
+```md
+机器人现在看不到这个飞书群/文档。要不要我用你的飞书账号权限只读这一次？
+我只会读取这次需要的群聊或文档，不会发送消息，也不会修改内容。
+```
+
+Only after the user agrees, retry with `allow_user_fallback: true`, `user_consent_confirmed: true`, and a short `consent_summary`. If the user does not agree, stop and explain that the group or document needs bot access or user permission.
+
 ## Output Shape
 
 For summaries, prefer:
@@ -39,6 +50,7 @@ Omit empty sections. Keep exact group names, timestamps, owners, and message lin
 ## Safety
 
 - Do not read or infer from unauthorized groups.
+- Do not use user permission unless the user explicitly agrees in the current task.
 - Do not present connector-local summaries as complete historical truth unless the connector status proves historical sync coverage.
 - If the user asks to reply or send, switch to [../message-reply/SKILL.md](../message-reply/SKILL.md).
 - If the user asks for daily digests, attention triage, reply queues, or summary documents, switch through [../messaging-context/SKILL.md](../messaging-context/SKILL.md).

@@ -6,7 +6,7 @@
 - A stdio MCP server exposes bounded tools to Codex.
 - A separate connector service owns webhooks, token refresh, storage, search, and send adapters.
 
-This keeps long-running platform work out of Codex sessions while still letting Codex sync history, search, summarize, generate group-chat reports, create Slack-style daily digests, triage notifications, find reply candidates, draft reply queues, create summary documents, publish summaries to Feishu/Lark, DingTalk, or Tencent Docs resources, read/write docs/sheets/bases/whiteboards, read native mention/unread state, read native or topic-inferred threads, map cross-platform identities, run due schedule records, safely send confirmed messages, and read or approve confirmed DingTalk OA items.
+This keeps long-running platform work out of Codex sessions while still letting Codex sync history, search, summarize, generate group-chat reports, create Slack-style daily digests, triage notifications, find reply candidates, draft reply queues, create summary documents, publish summaries to Feishu/Lark, DingTalk, or Tencent Docs resources, read/write docs/sheets/bases/whiteboards, fall back to user-approved Feishu/Lark read permission when bot access is insufficient, read native mention/unread state, read native or topic-inferred threads, map cross-platform identities, run due schedule records, safely send confirmed messages, read or approve confirmed DingTalk OA items, and report connector errors as redacted GitHub Issues.
 
 ## Structure
 
@@ -63,6 +63,8 @@ Set `CN_MESSAGING_STORE=sqlite` to use the production-style local SQLite store w
 - `run_due_scheduled_actions`
 - `draft_reply`
 - `sync_history`
+- `check_issue_reporter_status`
+- `report_connector_issue`
 - `authorize_conversation`
 - `upsert_identity_mapping`
 - `list_identity_mappings`
@@ -86,6 +88,7 @@ The plugin includes Slack-inspired workflows adapted for Feishu/Lark and DingTal
 - Reply drafting: find likely response candidates and prepare draft-only replies.
 - Summary document: Markdown document similar to a Slack Canvas recap.
 - Workspace publishing: publish reports or structured data to Feishu/Lark docs, sheets, Base/smartsheet, whiteboards; DingTalk docs, sheets, AI tables; and Tencent Docs resources through OpenAPI/MCP bridge configuration.
+- User-approved Feishu/Lark reads: if bot/app access cannot read a group or workspace resource, Codex asks before retrying through the user's own read permission for that single task.
 - Native mention state: read platform-native @me, unread conversation/feed state, and message read-status surfaces where supported.
 - Native/thread map: read platform-native threads when thread/root ids are available, or fall back to topic-centered timelines with decisions and blockers.
 - Identity mapping: connect Feishu/Lark and DingTalk user ids or display names to one canonical person for cross-platform triage.
@@ -98,6 +101,8 @@ These workflows operate only on messages already captured or synced into the con
 Workspace writes default to dry-run through `CN_WORKSPACE_DRY_RUN`. Real writes require `CN_WORKSPACE_DRY_RUN=false`, platform credentials in the connector environment, and explicit user confirmation in the MCP call.
 
 Tencent Docs support is implemented as a connector-side adapter boundary. Configure Tencent Docs OAuth/OpenAPI credentials with `TENCENT_DOCS_ACCESS_TOKEN` and `TENCENT_DOCS_OPEN_ID`; optional `TENCENT_DOCS_CLIENT_ID`, `TENCENT_DOCS_API_BASE`, and `TENCENT_DOCS_MCP_TOKEN` can be used for tenant-specific deployments or an official Tencent Docs MCP bridge.
+
+GitHub issue reporting is implemented as a connector-side agent. Set `CN_MESSAGING_GITHUB_ISSUES_REPO`, `CN_MESSAGING_AUTO_ISSUES=true`, and `CN_MESSAGING_ISSUE_DRY_RUN=false` when you want real automatic Issues; by default it can preview a redacted Issue without creating one.
 
 ## CodeBuddy / WorkBuddy
 

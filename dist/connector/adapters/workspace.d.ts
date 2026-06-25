@@ -1,4 +1,4 @@
-import type { MentionStateResult, Platform, WorkspaceProvider, WorkspaceResourceKind, WorkspaceResourceResult } from "../../shared/types.js";
+import type { AccessIdentity, MentionStateResult, Platform, WorkspaceProvider, WorkspaceResourceKind, WorkspaceResourceResult } from "../../shared/types.js";
 export interface WorkspaceStatus {
     feishu: {
         cli: "available" | "missing";
@@ -33,6 +33,10 @@ export interface WorkspaceReadInput {
     limit?: number;
     output_as?: "markdown" | "xml" | "csv" | "json" | "raw" | "code" | "image";
     tencent_api_path?: string;
+    access_identity?: AccessIdentity;
+    allow_user_fallback?: boolean;
+    user_consent_confirmed?: boolean;
+    consent_summary?: string;
 }
 export interface WorkspaceWriteInput extends WorkspaceReadInput {
     title?: string;

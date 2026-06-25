@@ -32,6 +32,7 @@ In plain language: this starts the small local helper service that Codex talks t
 - Configure and store the webhook verification secret outside plugin files.
 - Grant only the scopes needed for bot membership, message read/search, and message send.
 - Invite the bot to authorized groups.
+- Optional user-approved read fallback: configure Feishu/Lark OAuth user credentials in the connector environment if your deployment supports them. Codex must ask the user before using this path for a one-time group or document read.
 
 ### DingTalk
 
@@ -52,6 +53,10 @@ In plain language: this starts the small local helper service that Codex talks t
 | `CN_MESSAGING_DRY_RUN` | `true` | Friendly meaning: preview first, do not really send or approve yet |
 | `CN_WORKSPACE_DRY_RUN` | `true` | Friendly meaning: preview first, do not really write documents or sheets yet |
 | `CN_MESSAGING_ENFORCE_AUTH` | `false` | Set to `true` to require conversation authorization records |
+| `CN_MESSAGING_GITHUB_ISSUES_REPO` | `Iii3pl/cn-messaging-context` | GitHub repo for redacted connector error reports |
+| `CN_MESSAGING_AUTO_ISSUES` | `false` | Friendly meaning: when enabled, connector errors are automatically prepared for GitHub |
+| `CN_MESSAGING_ISSUE_DRY_RUN` | `true` | Friendly meaning: preview the GitHub problem report without creating a real Issue |
+| `CN_MESSAGING_ISSUE_LABELS` | `connector-error,automated-report` | Labels added to created GitHub Issues |
 | `FEISHU_WEBHOOK_SECRET` | unset | Feishu webhook signature secret |
 | `DINGTALK_WEBHOOK_SECRET` | unset | DingTalk webhook signature secret |
 
@@ -61,6 +66,8 @@ In plain language: this starts the small local helper service that Codex talks t
 - Feishu bot events are accepted only with valid signatures when a secret is configured.
 - DingTalk bot events are accepted only with valid signatures when a secret is configured.
 - `sync_history` imports a bounded time window.
+- Feishu/Lark user fallback refuses to run unless the user has agreed in the current task.
+- `check_issue_reporter_status` and `report_connector_issue` can preview a redacted GitHub problem report.
 - `create_conversation_report` returns key messages, decisions, follow-ups, and risks.
 - `create_daily_digest`, `triage_today`, `find_reply_candidates`, `draft_reply_queue`, and `create_summary_doc` work from synced or ingested messages.
 - `map_conversation_topics` and `read_topic_thread` return topic-centered timelines.
@@ -75,3 +82,5 @@ In plain language: this starts the small local helper service that Codex talks t
 - Say "默认先预览，不会真的发送/审批/写文档" instead of "dry-run".
 - Say "写入前会先问你" instead of "confirmation gate".
 - Say "钉钉详情接口有一部分字段读不出来" instead of raw platform parser errors.
+- Say "机器人看不到这个飞书群/文档，要不要用你的账号只读这一次？" instead of "permission fallback".
+- Say "我已把这个错误整理成一个待修的问题单" instead of "auto issue report".

@@ -6,6 +6,7 @@ const connectorUrl = process.env.CN_MESSAGING_CONNECTOR_URL ?? "http://127.0.0.1
 const platformSchema = z.enum(["feishu", "dingtalk"]);
 const workspaceProviderSchema = z.enum(["feishu", "dingtalk", "tencent"]);
 const workspaceKindSchema = z.enum(["doc", "sheet", "base", "whiteboard", "slide", "smartcanvas", "smartsheet", "board", "mind", "flowchart"]);
+const accessIdentitySchema = z.enum(["auto", "bot", "user"]);
 const timestampSchema = z.string().min(1);
 async function connectorRequest(path, init) {
     const response = await fetch(new URL(path, connectorUrl), {
@@ -34,7 +35,7 @@ function textResult(value) {
 }
 const server = new McpServer({
     name: "cn-messaging-context",
-    version: "0.6.0"
+    version: "0.7.0"
 });
 server.registerTool("list_conversations", {
     title: "List conversations",
@@ -199,7 +200,11 @@ const workspaceReadSchema = {
     query: z.string().optional(),
     limit: z.number().int().min(1).max(500).default(100),
     output_as: z.enum(["markdown", "xml", "csv", "json", "raw", "code", "image"]).optional(),
-    tencent_api_path: z.string().optional()
+    tencent_api_path: z.string().optional(),
+    access_identity: accessIdentitySchema.default("auto"),
+    allow_user_fallback: z.boolean().default(false),
+    user_consent_confirmed: z.boolean().default(false),
+    consent_summary: z.string().optional()
 };
 const workspaceWriteSchema = {
     ...workspaceReadSchema,
@@ -388,14 +393,18 @@ server.registerTool("run_due_scheduled_actions", {
 })));
 server.registerTool("sync_history", {
     title: "Sync platform history",
-    description: "Fetch real Feishu or DingTalk history through the local platform adapter and store normalized messages.",
+    description: "Fetch real Feishu or DingTalk history through the local platform adapter and store normalized messages. Feishu user permission fallback requires explicit user consent.",
     inputSchema: {
         platform: platformSchema,
         conversation_id: z.string().optional(),
         query: z.string().optional(),
         since: timestampSchema.optional(),
         until: timestampSchema.optional(),
-        limit: z.number().int().min(1).max(200).default(50)
+        limit: z.number().int().min(1).max(200).default(50),
+        access_identity: accessIdentitySchema.default("auto"),
+        allow_user_fallback: z.boolean().default(false),
+        user_consent_confirmed: z.boolean().default(false),
+        consent_summary: z.string().optional()
     }
 }, async (args) => textResult(await connectorRequest("/sync/history", {
     method: "POST",
@@ -512,6 +521,29 @@ server.registerTool("approve_dingtalk_approval", {
         body: JSON.stringify(args)
     }));
 });
+server.registerTool("check_issue_reporter_status", {
+    title: "Check GitHub issue reporter",
+    description: "Check whether connector errors can be turned into redacted GitHub Issues.",
+    inputSchema: {}
+}, async () => textResult(await connectorRequest("/issue-reporter/status")));
+server.registerTool("report_connector_issue", {
+    title: "Report connector issue",
+    description: "Create or preview a redacted GitHub Issue for a connector/plugin error.",
+    inputSchema: {
+        title: z.string().optional(),
+        summary: z.string().optional(),
+        severity: z.enum(["low", "medium", "high"]).default("medium"),
+        operation: z.string().optional(),
+        method: z.string().optional(),
+        path: z.string().optional(),
+        error: z.unknown().optional(),
+        context: z.unknown().optional(),
+        dry_run: z.boolean().default(true)
+    }
+}, async (args) => textResult(await connectorRequest("/issues/report", {
+    method: "POST",
+    body: JSON.stringify(args)
+})));
 server.registerTool("check_integration_status", {
     title: "Check integration status",
     description: "Return connector health, configured platforms, dry-run send mode, and storage status.",

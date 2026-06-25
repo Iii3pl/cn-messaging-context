@@ -10,6 +10,7 @@ import {
   sendMessageViaCli,
   syncHistoryFromCli
 } from "./adapters/cli.js";
+import { checkIssueReporterStatus, reportConnectorIssue } from "./adapters/github-issues.js";
 import {
   checkWorkspaceStatus,
   listMentionMessages,
@@ -506,7 +507,14 @@ app.post("/workspace/read", asyncRoute(async (req, res) => {
     action: "workspace.read",
     tenant_id: tenantId(req),
     status: "read",
-    metadata: { provider: result.provider, kind: result.kind, target: result.target, adapter: result.adapter }
+    metadata: {
+      provider: result.provider,
+      kind: result.kind,
+      target: result.target,
+      adapter: result.adapter,
+      access_identity: result.access_identity,
+      user_permission_used: result.user_permission_used
+    }
   });
   res.json(result);
 }));
@@ -644,6 +652,10 @@ app.post("/sync/history", asyncRoute(async (req, res) => {
     since?: string;
     until?: string;
     limit?: number;
+    access_identity?: "auto" | "bot" | "user";
+    allow_user_fallback?: boolean;
+    user_consent_confirmed?: boolean;
+    consent_summary?: string;
   };
   const platform = requirePlatform(body.platform);
   const messages = await syncHistoryFromCli({
@@ -653,7 +665,11 @@ app.post("/sync/history", asyncRoute(async (req, res) => {
     query: body.query,
     since: body.since,
     until: body.until,
-    limit: body.limit ?? 50
+    limit: body.limit ?? 50,
+    access_identity: body.access_identity,
+    allow_user_fallback: body.allow_user_fallback,
+    user_consent_confirmed: body.user_consent_confirmed,
+    consent_summary: body.consent_summary
   });
 
   let inserted = 0;
@@ -675,11 +691,35 @@ app.post("/sync/history", asyncRoute(async (req, res) => {
       inserted,
       query: body.query,
       since: body.since,
-      until: body.until
+      until: body.until,
+      access_identity: body.access_identity,
+      allow_user_fallback: body.allow_user_fallback,
+      user_consent_confirmed: body.user_consent_confirmed
     }
   });
 
   res.json({ platform, fetched: messages.length, inserted, messages });
+}));
+
+app.get("/issue-reporter/status", asyncRoute(async (_req, res) => {
+  res.json(checkIssueReporterStatus());
+}));
+
+app.post("/issues/report", asyncRoute(async (req, res) => {
+  const result = await reportConnectorIssue(req.body);
+  await store.appendAudit({
+    action: "issues.report",
+    tenant_id: tenantId(req),
+    status: result.reported ? "submitted" : "preview",
+    metadata: {
+      repo: result.repo,
+      title: result.title,
+      issue_url: result.issue_url,
+      reason: result.reason,
+      dry_run: result.dry_run
+    }
+  });
+  res.json(result);
 }));
 
 app.post("/authorizations/conversations", asyncRoute(async (req, res) => {
@@ -846,13 +886,32 @@ app.get("/integrations/status", asyncRoute(async (_req, res) => {
       conversations: conversations.length,
       audit_events: await store.auditCount()
     },
-    workspace
+    workspace,
+    issue_reporter: checkIssueReporterStatus()
   });
 }));
 
-app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+app.use(async (error: unknown, req: express.Request, res: express.Response, _next: express.NextFunction) => {
   const message = error instanceof Error ? error.message : String(error);
-  res.status(400).json({ error: message });
+  let issue: unknown;
+  if (process.env.CN_MESSAGING_AUTO_ISSUES === "true") {
+    try {
+      issue = await reportConnectorIssue({
+        operation: `${req.method} ${req.path}`,
+        method: req.method,
+        path: req.path,
+        error,
+        context: {
+          query: req.query,
+          body: summarizeRequestBody(req.body)
+        },
+        auto_report: true
+      });
+    } catch (reportError) {
+      issue = { reported: false, reason: reportError instanceof Error ? reportError.message : String(reportError) };
+    }
+  }
+  res.status(400).json({ error: message, issue_report: issue });
 });
 
 app.listen(port, "127.0.0.1", () => {
@@ -883,6 +942,51 @@ function asyncRoute(handler: express.RequestHandler): express.RequestHandler {
   return (req, res, next) => {
     Promise.resolve(handler(req, res, next)).catch(next);
   };
+}
+
+function summarizeRequestBody(body: unknown): unknown {
+  if (!body || typeof body !== "object") {
+    return body;
+  }
+  const input = body as Record<string, unknown>;
+  const summary: Record<string, unknown> = {};
+  for (const key of [
+    "platform",
+    "provider",
+    "kind",
+    "conversation_id",
+    "conversation_ids",
+    "target",
+    "table_id",
+    "sheet_id",
+    "range",
+    "query",
+    "since",
+    "until",
+    "limit",
+    "access_identity",
+    "allow_user_fallback",
+    "user_consent_confirmed",
+    "confirmed_by_user",
+    "mode"
+  ]) {
+    if (key in input) {
+      summary[key] = input[key];
+    }
+  }
+  if (typeof input.text === "string") {
+    summary.text_length = input.text.length;
+  }
+  if (typeof input.content === "string") {
+    summary.content_length = input.content.length;
+  }
+  if (Array.isArray(input.values)) {
+    summary.values_rows = input.values.length;
+  }
+  if (Array.isArray(input.records)) {
+    summary.records = input.records.length;
+  }
+  return summary;
 }
 
 function buildConversationReport(messages: MessageRecord[], filters: { since?: string; until?: string; query?: string }): string {

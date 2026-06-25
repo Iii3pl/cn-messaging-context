@@ -22,6 +22,7 @@ Use this as the router for Feishu and DingTalk work. Read the relevant context f
 | Scheduled digests and messages | [../scheduled-workflows/SKILL.md](../scheduled-workflows/SKILL.md) |
 | Drafting or sending messages | [../message-reply/SKILL.md](../message-reply/SKILL.md) |
 | DingTalk OA approvals | [../approval-workflow/SKILL.md](../approval-workflow/SKILL.md) |
+| Connector errors and GitHub Issues | [../error-reporting/SKILL.md](../error-reporting/SKILL.md) |
 
 ## Supported Actions
 
@@ -44,12 +45,16 @@ Use this as the router for Feishu and DingTalk work. Read the relevant context f
 - Draft replies from available context.
 - Send a message only after the user confirms the exact platform, destination, and text.
 - Read DingTalk OA approvals and approve only after exact user confirmation.
+- Ask before using Feishu/Lark user permission to read groups or documents that bot/app permission cannot access.
+- Turn connector errors into redacted GitHub Issues for later debugging.
 
 ## Boundaries
 
 - Do not claim workspace-wide coverage unless `check_integration_status` and the connector results support it.
 - Do not invent channel names, message history, permissions, owners, or decisions.
 - If a requested conversation is not visible, say that it may be disconnected, unauthorized, or missing from the connector service.
+- If Feishu/Lark bot access fails, ask before using the user's own permission for a one-time read.
+- If a connector error blocks the workflow, use the error-reporting skill so the failure can become a GitHub Issue without leaking secrets.
 - Treat customer-facing groups, all-hands groups, finance/approval groups, and broad mentions as high-impact.
 - Keep Feishu and DingTalk identifiers distinct. Do not map a DingTalk conversation to Feishu unless the connector explicitly returns that mapping.
 
@@ -59,6 +64,7 @@ Use this as the router for Feishu and DingTalk work. Read the relevant context f
 - Use `list_conversations` when the destination or source group is ambiguous.
 - Use `search_messages` for keyword or time-window searches.
 - Use `get_recent_context` for "latest", "recent", or reply-thread style tasks.
+- Use `sync_history` with user fallback fields only after the user agreed to a one-time Feishu/Lark read through their account.
 - Use `summarize_conversation` for bounded summaries.
 - Use `create_conversation_report` when the user asks for a daily report, group report, key messages, decisions, follow-ups, or risks.
 - Use `create_daily_digest` for cross-group daily or weekly digests.
@@ -74,3 +80,4 @@ Use this as the router for Feishu and DingTalk work. Read the relevant context f
 - Use `draft_reply` for draft-first tasks.
 - Use `send_message` only through [../message-reply/SKILL.md](../message-reply/SKILL.md).
 - Use DingTalk approval tools only through [../approval-workflow/SKILL.md](../approval-workflow/SKILL.md).
+- Use `check_issue_reporter_status` and `report_connector_issue` only through [../error-reporting/SKILL.md](../error-reporting/SKILL.md).

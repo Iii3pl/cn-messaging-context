@@ -1,4 +1,4 @@
-import type { ApprovalRecord, MessageRecord, Platform } from "../../shared/types.js";
+import type { AccessIdentity, ApprovalRecord, MessageRecord, Platform } from "../../shared/types.js";
 export interface AdapterStatus {
     cli: "available" | "missing";
     command: string;
@@ -17,6 +17,10 @@ export interface HistorySyncRequest {
     since?: string;
     until?: string;
     limit?: number;
+    access_identity?: AccessIdentity;
+    allow_user_fallback?: boolean;
+    user_consent_confirmed?: boolean;
+    consent_summary?: string;
 }
 export declare function checkCliStatus(): Promise<{
     feishu: AdapterStatus;

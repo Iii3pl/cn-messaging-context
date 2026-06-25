@@ -1,5 +1,6 @@
 export type Platform = "feishu" | "dingtalk";
 export type WorkspaceProvider = Platform | "tencent";
+export type AccessIdentity = "auto" | "bot" | "user";
 export type WorkspaceResourceKind = "doc" | "sheet" | "base" | "whiteboard" | "slide" | "smartcanvas" | "smartsheet" | "board" | "mind" | "flowchart";
 export interface MessageRecord {
     tenant_id?: string;
@@ -78,6 +79,8 @@ export interface WorkspaceResourceResult {
     action: "read" | "write" | "publish";
     dry_run: boolean;
     adapter: string;
+    access_identity?: AccessIdentity;
+    user_permission_used?: boolean;
     target?: string;
     raw_result?: unknown;
     diagnostic?: string;

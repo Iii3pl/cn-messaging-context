@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import type { ApprovalRecord, MessageRecord, Platform } from "../../shared/types.js";
+import type { AccessIdentity, ApprovalRecord, MessageRecord, Platform } from "../../shared/types.js";
 
 export interface AdapterStatus {
   cli: "available" | "missing";
@@ -21,6 +21,10 @@ export interface HistorySyncRequest {
   since?: string;
   until?: string;
   limit?: number;
+  access_identity?: AccessIdentity;
+  allow_user_fallback?: boolean;
+  user_consent_confirmed?: boolean;
+  consent_summary?: string;
 }
 
 export async function checkCliStatus(): Promise<{ feishu: AdapterStatus; dingtalk: AdapterStatus }> {
@@ -133,6 +137,7 @@ export async function approveDingTalkApproval(input: {
 }
 
 async function syncFeishuHistory(request: HistorySyncRequest): Promise<MessageRecord[]> {
+  assertUserAccessConsent(request);
   const args = [
     "im",
     "+messages-search",
@@ -154,8 +159,20 @@ async function syncFeishuHistory(request: HistorySyncRequest): Promise<MessageRe
     args.push("--end", request.until);
   }
 
-  const raw = await runJson("lark-cli", args);
-  return extractArray(raw).map((item) => normalizeCliMessage("feishu", item, request.tenant_id));
+  const { raw, accessIdentity, userPermissionUsed } = await runWithFeishuAccessFallback({
+    args,
+    request,
+    operation: "feishu_history_sync"
+  });
+  return extractArray(raw).map((item) => ({
+    ...normalizeCliMessage("feishu", item, request.tenant_id),
+    raw_payload: {
+      item,
+      access_identity: accessIdentity,
+      user_permission_used: userPermissionUsed,
+      consent_summary: userPermissionUsed ? request.consent_summary : undefined
+    }
+  }));
 }
 
 async function syncDingTalkHistory(request: HistorySyncRequest): Promise<MessageRecord[]> {
@@ -375,6 +392,49 @@ async function commandExists(command: string): Promise<boolean> {
 async function runJson(command: string, args: string[]): Promise<unknown> {
   const output = await run(command, args, { parseJson: true, timeoutMs: 60000 });
   return JSON.parse(output);
+}
+
+function assertUserAccessConsent(request: Pick<HistorySyncRequest, "access_identity" | "allow_user_fallback" | "user_consent_confirmed">): void {
+  if ((request.access_identity === "user" || request.allow_user_fallback) && !request.user_consent_confirmed) {
+    throw new Error("需要先得到你的同意，才能用你的飞书账号权限读取群聊或文档。");
+  }
+}
+
+async function runWithFeishuAccessFallback(input: {
+  args: string[];
+  request: Pick<HistorySyncRequest, "access_identity" | "allow_user_fallback" | "user_consent_confirmed" | "consent_summary">;
+  operation: string;
+}): Promise<{ raw: unknown; accessIdentity: AccessIdentity; userPermissionUsed: boolean }> {
+  const primaryIdentity = input.request.access_identity ?? "auto";
+  try {
+    return {
+      raw: await runJson("lark-cli", [...input.args, ...accessArgs(primaryIdentity)]),
+      accessIdentity: primaryIdentity,
+      userPermissionUsed: primaryIdentity === "user"
+    };
+  } catch (error) {
+    if (primaryIdentity === "user" || !input.request.allow_user_fallback || !isPermissionLikeError(error)) {
+      throw error;
+    }
+    assertUserAccessConsent(input.request);
+    return {
+      raw: await runJson("lark-cli", [...input.args, ...accessArgs("user")]),
+      accessIdentity: "user",
+      userPermissionUsed: true
+    };
+  }
+}
+
+function accessArgs(identity: AccessIdentity): string[] {
+  if (identity === "auto") {
+    return [];
+  }
+  return ["--as", identity];
+}
+
+function isPermissionLikeError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /permission|forbidden|unauthori[sz]ed|scope|access denied|no access|无权限|权限不足|没有权限|未授权|91403|99991663/i.test(message);
 }
 
 function run(command: string, args: string[], options: { parseJson: boolean; timeoutMs: number }): Promise<string> {

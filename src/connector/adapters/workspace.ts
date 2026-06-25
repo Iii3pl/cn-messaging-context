@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import type {
+  AccessIdentity,
   MentionStateResult,
   Platform,
   WorkspaceProvider,
@@ -29,6 +30,10 @@ export interface WorkspaceReadInput {
   limit?: number;
   output_as?: "markdown" | "xml" | "csv" | "json" | "raw" | "code" | "image";
   tencent_api_path?: string;
+  access_identity?: AccessIdentity;
+  allow_user_fallback?: boolean;
+  user_consent_confirmed?: boolean;
+  consent_summary?: string;
 }
 
 export interface WorkspaceWriteInput extends WorkspaceReadInput {
@@ -198,8 +203,9 @@ export async function queryMessageReadStatus(input: ReadStatusInput): Promise<Me
 }
 
 async function readFeishuWorkspace(input: WorkspaceReadInput): Promise<WorkspaceResourceResult> {
+  assertUserAccessConsent(input);
   if (input.kind === "doc" || input.kind === "smartcanvas") {
-    const raw = await runJson("lark-cli", [
+    const { raw, accessIdentity, userPermissionUsed } = await runWithFeishuAccessFallback([
       "docs",
       "+fetch",
       "--api-version",
@@ -210,18 +216,18 @@ async function readFeishuWorkspace(input: WorkspaceReadInput): Promise<Workspace
       input.output_as === "xml" ? "xml" : "markdown",
       "--format",
       "json"
-    ]);
-    return result(input, "read", false, "lark-cli docs +fetch", raw);
+    ], input);
+    return result(input, "read", false, "lark-cli docs +fetch", raw, accessIdentity, userPermissionUsed);
   }
   if (input.kind === "sheet") {
     const args = ["sheets", "+csv-get", "--format", "json", "--range", input.range ?? "A1:Z100"];
     pushTargetArg(args, input.target);
     pushOptional(args, "--sheet-id", input.sheet_id);
-    const raw = await runJson("lark-cli", args);
-    return result(input, "read", false, "lark-cli sheets +csv-get", raw);
+    const { raw, accessIdentity, userPermissionUsed } = await runWithFeishuAccessFallback(args, input);
+    return result(input, "read", false, "lark-cli sheets +csv-get", raw, accessIdentity, userPermissionUsed);
   }
   if (input.kind === "base" || input.kind === "smartsheet") {
-    const raw = await runJson("lark-cli", [
+    const { raw, accessIdentity, userPermissionUsed } = await runWithFeishuAccessFallback([
       "base",
       "+record-list",
       "--base-token",
@@ -232,11 +238,11 @@ async function readFeishuWorkspace(input: WorkspaceReadInput): Promise<Workspace
       String(input.limit ?? 100),
       "--format",
       "json"
-    ]);
-    return result(input, "read", false, "lark-cli base +record-list", raw);
+    ], input);
+    return result(input, "read", false, "lark-cli base +record-list", raw, accessIdentity, userPermissionUsed);
   }
   if (input.kind === "whiteboard" || input.kind === "board") {
-    const raw = await runJson("lark-cli", [
+    const { raw, accessIdentity, userPermissionUsed } = await runWithFeishuAccessFallback([
       "whiteboard",
       "+query",
       "--whiteboard-token",
@@ -245,8 +251,8 @@ async function readFeishuWorkspace(input: WorkspaceReadInput): Promise<Workspace
       input.output_as === "raw" ? "raw" : "code",
       "--format",
       "json"
-    ]);
-    return result(input, "read", false, "lark-cli whiteboard +query", raw);
+    ], input);
+    return result(input, "read", false, "lark-cli whiteboard +query", raw, accessIdentity, userPermissionUsed);
   }
   return unsupported(input, "read", "feishu_workspace_kind_not_supported");
 }
@@ -465,13 +471,23 @@ async function callTencentDocsApi(method: string, path: string, body: unknown): 
   return payload;
 }
 
-function result(input: WorkspaceReadInput, action: WorkspaceResourceResult["action"], dryRun: boolean, adapter: string, raw: unknown): WorkspaceResourceResult {
+function result(
+  input: WorkspaceReadInput,
+  action: WorkspaceResourceResult["action"],
+  dryRun: boolean,
+  adapter: string,
+  raw: unknown,
+  accessIdentity: AccessIdentity | undefined = input.access_identity,
+  userPermissionUsed = accessIdentity === "user"
+): WorkspaceResourceResult {
   return {
     provider: input.provider,
     kind: input.kind,
     action,
     dry_run: dryRun,
     adapter,
+    access_identity: accessIdentity,
+    user_permission_used: userPermissionUsed,
     target: input.target,
     raw_result: raw
   };
@@ -557,6 +573,48 @@ function matrixToCsv(rows: unknown[][]): string {
 function csvCell(value: unknown): string {
   const text = value === null || value === undefined ? "" : String(value);
   return /[",\n]/.test(text) ? `"${text.replaceAll("\"", "\"\"")}"` : text;
+}
+
+function assertUserAccessConsent(input: Pick<WorkspaceReadInput, "access_identity" | "allow_user_fallback" | "user_consent_confirmed">): void {
+  if ((input.access_identity === "user" || input.allow_user_fallback) && !input.user_consent_confirmed) {
+    throw new Error("需要先得到你的同意，才能用你的飞书账号权限读取群聊或文档。");
+  }
+}
+
+async function runWithFeishuAccessFallback(
+  args: string[],
+  input: Pick<WorkspaceReadInput, "access_identity" | "allow_user_fallback" | "user_consent_confirmed">
+): Promise<{ raw: unknown; accessIdentity: AccessIdentity; userPermissionUsed: boolean }> {
+  const primaryIdentity = input.access_identity ?? "auto";
+  try {
+    return {
+      raw: await runJson("lark-cli", [...args, ...accessArgs(primaryIdentity)]),
+      accessIdentity: primaryIdentity,
+      userPermissionUsed: primaryIdentity === "user"
+    };
+  } catch (error) {
+    if (primaryIdentity === "user" || !input.allow_user_fallback || !isPermissionLikeError(error)) {
+      throw error;
+    }
+    assertUserAccessConsent(input);
+    return {
+      raw: await runJson("lark-cli", [...args, ...accessArgs("user")]),
+      accessIdentity: "user",
+      userPermissionUsed: true
+    };
+  }
+}
+
+function accessArgs(identity: AccessIdentity): string[] {
+  if (identity === "auto") {
+    return [];
+  }
+  return ["--as", identity];
+}
+
+function isPermissionLikeError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /permission|forbidden|unauthori[sz]ed|scope|access denied|no access|无权限|权限不足|没有权限|未授权|91403|99991663/i.test(message);
 }
 
 function extractArray(raw: unknown): unknown[] {

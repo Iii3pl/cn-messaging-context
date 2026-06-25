@@ -89,6 +89,7 @@ export async function approveDingTalkApproval(input) {
     return { sent: true, dry_run: false, adapter: "dws", raw_result: raw };
 }
 async function syncFeishuHistory(request) {
+    assertUserAccessConsent(request);
     const args = [
         "im",
         "+messages-search",
@@ -109,8 +110,20 @@ async function syncFeishuHistory(request) {
     if (request.until) {
         args.push("--end", request.until);
     }
-    const raw = await runJson("lark-cli", args);
-    return extractArray(raw).map((item) => normalizeCliMessage("feishu", item, request.tenant_id));
+    const { raw, accessIdentity, userPermissionUsed } = await runWithFeishuAccessFallback({
+        args,
+        request,
+        operation: "feishu_history_sync"
+    });
+    return extractArray(raw).map((item) => ({
+        ...normalizeCliMessage("feishu", item, request.tenant_id),
+        raw_payload: {
+            item,
+            access_identity: accessIdentity,
+            user_permission_used: userPermissionUsed,
+            consent_summary: userPermissionUsed ? request.consent_summary : undefined
+        }
+    }));
 }
 async function syncDingTalkHistory(request) {
     const args = ["chat", "message", request.query ? "search" : "list-all", "--format", "json", "--limit", String(request.limit ?? 50)];
@@ -315,6 +328,42 @@ async function commandExists(command) {
 async function runJson(command, args) {
     const output = await run(command, args, { parseJson: true, timeoutMs: 60000 });
     return JSON.parse(output);
+}
+function assertUserAccessConsent(request) {
+    if ((request.access_identity === "user" || request.allow_user_fallback) && !request.user_consent_confirmed) {
+        throw new Error("需要先得到你的同意，才能用你的飞书账号权限读取群聊或文档。");
+    }
+}
+async function runWithFeishuAccessFallback(input) {
+    const primaryIdentity = input.request.access_identity ?? "auto";
+    try {
+        return {
+            raw: await runJson("lark-cli", [...input.args, ...accessArgs(primaryIdentity)]),
+            accessIdentity: primaryIdentity,
+            userPermissionUsed: primaryIdentity === "user"
+        };
+    }
+    catch (error) {
+        if (primaryIdentity === "user" || !input.request.allow_user_fallback || !isPermissionLikeError(error)) {
+            throw error;
+        }
+        assertUserAccessConsent(input.request);
+        return {
+            raw: await runJson("lark-cli", [...input.args, ...accessArgs("user")]),
+            accessIdentity: "user",
+            userPermissionUsed: true
+        };
+    }
+}
+function accessArgs(identity) {
+    if (identity === "auto") {
+        return [];
+    }
+    return ["--as", identity];
+}
+function isPermissionLikeError(error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return /permission|forbidden|unauthori[sz]ed|scope|access denied|no access|无权限|权限不足|没有权限|未授权|91403|99991663/i.test(message);
 }
 function run(command, args, options) {
     return new Promise((resolve, reject) => {

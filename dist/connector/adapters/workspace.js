@@ -128,8 +128,9 @@ export async function queryMessageReadStatus(input) {
     };
 }
 async function readFeishuWorkspace(input) {
+    assertUserAccessConsent(input);
     if (input.kind === "doc" || input.kind === "smartcanvas") {
-        const raw = await runJson("lark-cli", [
+        const { raw, accessIdentity, userPermissionUsed } = await runWithFeishuAccessFallback([
             "docs",
             "+fetch",
             "--api-version",
@@ -140,18 +141,18 @@ async function readFeishuWorkspace(input) {
             input.output_as === "xml" ? "xml" : "markdown",
             "--format",
             "json"
-        ]);
-        return result(input, "read", false, "lark-cli docs +fetch", raw);
+        ], input);
+        return result(input, "read", false, "lark-cli docs +fetch", raw, accessIdentity, userPermissionUsed);
     }
     if (input.kind === "sheet") {
         const args = ["sheets", "+csv-get", "--format", "json", "--range", input.range ?? "A1:Z100"];
         pushTargetArg(args, input.target);
         pushOptional(args, "--sheet-id", input.sheet_id);
-        const raw = await runJson("lark-cli", args);
-        return result(input, "read", false, "lark-cli sheets +csv-get", raw);
+        const { raw, accessIdentity, userPermissionUsed } = await runWithFeishuAccessFallback(args, input);
+        return result(input, "read", false, "lark-cli sheets +csv-get", raw, accessIdentity, userPermissionUsed);
     }
     if (input.kind === "base" || input.kind === "smartsheet") {
-        const raw = await runJson("lark-cli", [
+        const { raw, accessIdentity, userPermissionUsed } = await runWithFeishuAccessFallback([
             "base",
             "+record-list",
             "--base-token",
@@ -162,11 +163,11 @@ async function readFeishuWorkspace(input) {
             String(input.limit ?? 100),
             "--format",
             "json"
-        ]);
-        return result(input, "read", false, "lark-cli base +record-list", raw);
+        ], input);
+        return result(input, "read", false, "lark-cli base +record-list", raw, accessIdentity, userPermissionUsed);
     }
     if (input.kind === "whiteboard" || input.kind === "board") {
-        const raw = await runJson("lark-cli", [
+        const { raw, accessIdentity, userPermissionUsed } = await runWithFeishuAccessFallback([
             "whiteboard",
             "+query",
             "--whiteboard-token",
@@ -175,8 +176,8 @@ async function readFeishuWorkspace(input) {
             input.output_as === "raw" ? "raw" : "code",
             "--format",
             "json"
-        ]);
-        return result(input, "read", false, "lark-cli whiteboard +query", raw);
+        ], input);
+        return result(input, "read", false, "lark-cli whiteboard +query", raw, accessIdentity, userPermissionUsed);
     }
     return unsupported(input, "read", "feishu_workspace_kind_not_supported");
 }
@@ -388,13 +389,15 @@ async function callTencentDocsApi(method, path, body) {
     }
     return payload;
 }
-function result(input, action, dryRun, adapter, raw) {
+function result(input, action, dryRun, adapter, raw, accessIdentity = input.access_identity, userPermissionUsed = accessIdentity === "user") {
     return {
         provider: input.provider,
         kind: input.kind,
         action,
         dry_run: dryRun,
         adapter,
+        access_identity: accessIdentity,
+        user_permission_used: userPermissionUsed,
         target: input.target,
         raw_result: raw
     };
@@ -469,6 +472,42 @@ function matrixToCsv(rows) {
 function csvCell(value) {
     const text = value === null || value === undefined ? "" : String(value);
     return /[",\n]/.test(text) ? `"${text.replaceAll("\"", "\"\"")}"` : text;
+}
+function assertUserAccessConsent(input) {
+    if ((input.access_identity === "user" || input.allow_user_fallback) && !input.user_consent_confirmed) {
+        throw new Error("需要先得到你的同意，才能用你的飞书账号权限读取群聊或文档。");
+    }
+}
+async function runWithFeishuAccessFallback(args, input) {
+    const primaryIdentity = input.access_identity ?? "auto";
+    try {
+        return {
+            raw: await runJson("lark-cli", [...args, ...accessArgs(primaryIdentity)]),
+            accessIdentity: primaryIdentity,
+            userPermissionUsed: primaryIdentity === "user"
+        };
+    }
+    catch (error) {
+        if (primaryIdentity === "user" || !input.allow_user_fallback || !isPermissionLikeError(error)) {
+            throw error;
+        }
+        assertUserAccessConsent(input);
+        return {
+            raw: await runJson("lark-cli", [...args, ...accessArgs("user")]),
+            accessIdentity: "user",
+            userPermissionUsed: true
+        };
+    }
+}
+function accessArgs(identity) {
+    if (identity === "auto") {
+        return [];
+    }
+    return ["--as", identity];
+}
+function isPermissionLikeError(error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return /permission|forbidden|unauthori[sz]ed|scope|access denied|no access|无权限|权限不足|没有权限|未授权|91403|99991663/i.test(message);
 }
 function extractArray(raw) {
     if (Array.isArray(raw)) {

@@ -20,16 +20,22 @@ Body:
 
 ```json
 {
-  "platform": "dingtalk",
-  "conversation_id": "cid_xxx",
+  "platform": "feishu",
+  "conversation_id": "oc_xxx",
   "since": "2026-06-24T00:00:00+08:00",
   "until": "2026-06-25T00:00:00+08:00",
   "query": "预算",
-  "limit": 50
+  "limit": 50,
+  "access_identity": "auto",
+  "allow_user_fallback": true,
+  "user_consent_confirmed": true,
+  "consent_summary": "User agreed to a one-time Feishu read through their account after bot access failed."
 }
 ```
 
 Imports a bounded history window through the configured platform adapter.
+
+For Feishu/Lark, `access_identity` can be `auto`, `bot`, or `user`. User permission is read-only and requires `user_consent_confirmed: true`; otherwise the connector rejects the call.
 
 ### `GET /conversations`
 
@@ -259,7 +265,10 @@ Body:
   "kind": "sheet",
   "target": "spreadsheet_token_or_url",
   "sheet_id": "Sheet1",
-  "range": "A1:D20"
+  "range": "A1:D20",
+  "allow_user_fallback": true,
+  "user_consent_confirmed": true,
+  "consent_summary": "User agreed to a one-time Feishu sheet read through their account."
 }
 ```
 
@@ -268,6 +277,8 @@ Supported `provider`: `feishu`, `dingtalk`, `tencent`.
 Supported `kind`: `doc`, `sheet`, `base`, `whiteboard`, `slide`, `smartcanvas`, `smartsheet`, `board`, `mind`, `flowchart`.
 
 Tencent Docs calls require connector-side OAuth/OpenAPI credentials. If a deployment needs a tenant-specific Tencent endpoint, pass `tencent_api_path` or configure `TENCENT_DOCS_API_BASE`.
+
+Feishu/Lark reads support user-approved fallback for docs, sheets, Base/smartsheets, and whiteboards. The connector records whether user permission was used in `access_identity` and `user_permission_used`.
 
 ### `POST /workspace/write`
 
@@ -445,6 +456,31 @@ When dry-run mode is enabled, approval actions create audit events but do not ca
 
 ## Status API
 
+### `GET /issue-reporter/status`
+
+Returns whether the GitHub issue reporter is configured, whether automatic reporting is enabled, and whether it is still in preview mode.
+
+### `POST /issues/report`
+
+Body:
+
+```json
+{
+  "title": "Feishu document read failed",
+  "summary": "机器人无法读取指定飞书文档，用户希望排查权限。",
+  "severity": "medium",
+  "operation": "POST /workspace/read",
+  "error": "permission denied",
+  "context": {
+    "provider": "feishu",
+    "kind": "doc"
+  },
+  "dry_run": true
+}
+```
+
+Creates or previews a redacted GitHub Issue. Preview mode is the default; set `CN_MESSAGING_ISSUE_DRY_RUN=false` for real issue creation.
+
 ### `GET /integrations/status`
 
-Returns configured platforms, dry-run mode, data directory, and connector health.
+Returns configured platforms, dry-run mode, data directory, connector health, workspace adapter status, and GitHub issue reporter status.

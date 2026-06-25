@@ -5,6 +5,7 @@
 - The MCP server should only call the connector API and should not hold Feishu or DingTalk credentials.
 - Default to authorized conversations only. Production deployments must enforce user, tenant, bot, and conversation authorization.
 - Require user confirmation before sending. Show the platform, destination, and exact text.
+- Require user consent before using Feishu/Lark user permission to read a group, document, sheet, Base/smartsheet, or whiteboard that bot/app access cannot read. Treat this as a one-time read, not a standing grant.
 - Require user confirmation before writing or overwriting external workspace resources. Show the provider, resource type, target, mode, and content/data summary.
 - Require user confirmation before approving DingTalk OA items. Show the title or instance id, task id, and exact remark.
 - Audit read and write actions: actor, platform, destination, action type, timestamp, and result.
@@ -12,6 +13,24 @@
 - Deduplicate webhook events by `platform + message_id` to avoid repeated storage or repeated actions.
 - Store only work identity handles needed for routing when using identity mappings. Do not store private phone numbers, tokens, cookies, or unrelated personal data as aliases.
 - Keep Tencent Docs OAuth/OpenAPI credentials and MCP tokens in connector-service environment or secret storage only.
+- Keep GitHub tokens outside plugin files. Error reports must redact tokens, cookies, webhook signatures, secrets, authorization headers, long numeric ids, and phone-like values before creating Issues.
+
+## Feishu/Lark User Read Safety
+
+Bot/app access remains the default. User permission may be used only when:
+
+- The bot/app read failed because of access.
+- The user explicitly agreed in the current task.
+- The connector call records `user_consent_confirmed` and a short `consent_summary`.
+- The operation is read-only.
+
+Do not silently keep user permission enabled for later unrelated requests.
+
+## GitHub Issue Reporting Safety
+
+Issue reporting defaults to preview mode through `CN_MESSAGING_ISSUE_DRY_RUN=true`. To create real Issues automatically, production deployments must deliberately set `CN_MESSAGING_AUTO_ISSUES=true` and `CN_MESSAGING_ISSUE_DRY_RUN=false`.
+
+Issue bodies should include route, operation, safe request summary, and sanitized error text. They should not include full chat history, full document content, tokens, secrets, cookies, private keys, or webhook signatures.
 
 ## Workspace Write Safety
 
