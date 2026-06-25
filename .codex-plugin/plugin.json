@@ -5,8 +5,8 @@
   "author": {
     "name": "Wuliang"
   },
-  "homepage": "https://github.com/wuliang/cn-messaging-context",
-  "repository": "https://github.com/wuliang/cn-messaging-context",
+  "homepage": "https://github.com/Iii3pl/cn-messaging-context",
+  "repository": "https://github.com/Iii3pl/cn-messaging-context",
   "license": "MIT",
   "keywords": [
     "feishu",
@@ -29,9 +29,9 @@
       "Interactive",
       "Write"
     ],
-    "websiteURL": "https://github.com/wuliang/cn-messaging-context",
-    "privacyPolicyURL": "https://github.com/wuliang/cn-messaging-context/blob/main/docs/privacy.md",
-    "termsOfServiceURL": "https://github.com/wuliang/cn-messaging-context/blob/main/docs/terms.md",
+    "websiteURL": "https://github.com/Iii3pl/cn-messaging-context",
+    "privacyPolicyURL": "https://github.com/Iii3pl/cn-messaging-context/blob/main/docs/privacy.md",
+    "termsOfServiceURL": "https://github.com/Iii3pl/cn-messaging-context/blob/main/docs/terms.md",
     "defaultPrompt": [
       "总结飞书里昨天关于采购平台的讨论",
       "从钉钉项目群找最近三天的预算调整消息",
