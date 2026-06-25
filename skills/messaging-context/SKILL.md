@@ -1,16 +1,17 @@
 ---
 name: messaging-context
-description: Route Feishu and DingTalk context tasks, choose the right workflow, and enforce read/write safety boundaries.
+description: Route Feishu, DingTalk, and local WeChat context tasks, choose the right workflow, and enforce read/write safety boundaries.
 ---
 
 # Messaging Context
 
-Use this as the router for Feishu and DingTalk work. Read the relevant context first, then switch to the most specific skill:
+Use this as the router for Feishu, DingTalk, and local WeChat work. Read the relevant context first, then switch to the most specific skill:
 
 | Workflow | Skill |
 | --- | --- |
 | Feishu/Lark context search and summaries | [../feishu-context/SKILL.md](../feishu-context/SKILL.md) |
 | DingTalk context search and summaries | [../dingtalk-context/SKILL.md](../dingtalk-context/SKILL.md) |
+| Local WeChat context search and summaries | [../wechat-context/SKILL.md](../wechat-context/SKILL.md) |
 | Daily digests across channels or topics | [../daily-digest/SKILL.md](../daily-digest/SKILL.md) |
 | Personal notification triage | [../notification-triage/SKILL.md](../notification-triage/SKILL.md) |
 | Find and draft replies | [../reply-drafting/SKILL.md](../reply-drafting/SKILL.md) |
@@ -45,6 +46,7 @@ Use this as the router for Feishu and DingTalk work. Read the relevant context f
 - Draft replies from available context.
 - Send a message only after the user confirms the exact platform, destination, and text.
 - Read DingTalk OA approvals and approve only after exact user confirmation.
+- Read local WeChat sessions, unread chats, history, and search results through `wx-cli`.
 - Ask before using Feishu/Lark user permission to read groups or documents that bot/app permission cannot access.
 - Turn connector errors into redacted GitHub Issues for later debugging.
 
@@ -54,6 +56,7 @@ Use this as the router for Feishu and DingTalk work. Read the relevant context f
 - Do not invent channel names, message history, permissions, owners, or decisions.
 - If a requested conversation is not visible, say that it may be disconnected, unauthorized, or missing from the connector service.
 - If Feishu/Lark bot access fails, ask before using the user's own permission for a one-time read.
+- Treat WeChat as local read-only context. Do not send WeChat messages through this plugin.
 - If a connector error blocks the workflow, use the error-reporting skill so the failure can become a GitHub Issue without leaking secrets.
 - Treat customer-facing groups, all-hands groups, finance/approval groups, and broad mentions as high-impact.
 - Keep Feishu and DingTalk identifiers distinct. Do not map a DingTalk conversation to Feishu unless the connector explicitly returns that mapping.
@@ -65,6 +68,7 @@ Use this as the router for Feishu and DingTalk work. Read the relevant context f
 - Use `search_messages` for keyword or time-window searches.
 - Use `get_recent_context` for "latest", "recent", or reply-thread style tasks.
 - Use `sync_history` with user fallback fields only after the user agreed to a one-time Feishu/Lark read through their account.
+- Use `list_wechat_sessions`, `list_wechat_unread`, and `sync_history` with `platform: "wechat"` only through [../wechat-context/SKILL.md](../wechat-context/SKILL.md).
 - Use `summarize_conversation` for bounded summaries.
 - Use `create_conversation_report` when the user asks for a daily report, group report, key messages, decisions, follow-ups, or risks.
 - Use `create_daily_digest` for cross-group daily or weekly digests.

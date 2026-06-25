@@ -1,6 +1,6 @@
 import express from "express";
 import path from "node:path";
-import { approveDingTalkApproval, checkCliStatus, getDingTalkApprovalDetail, getDingTalkApprovalRecords, getDingTalkApprovalTasks, listDingTalkPendingApprovals, sendMessageViaCli, syncHistoryFromCli } from "./adapters/cli.js";
+import { approveDingTalkApproval, checkCliStatus, getDingTalkApprovalDetail, getDingTalkApprovalRecords, getDingTalkApprovalTasks, listWechatSessions, listWechatUnread, listDingTalkPendingApprovals, sendMessageViaCli, syncHistoryFromCli } from "./adapters/cli.js";
 import { checkIssueReporterStatus, reportConnectorIssue } from "./adapters/github-issues.js";
 import { checkWorkspaceStatus, listMentionMessages, listUnreadConversations, queryMessageReadStatus, readWorkspaceResource, writeWorkspaceResource } from "./adapters/workspace.js";
 import { normalizeDingTalkEvent, normalizeFeishuEvent } from "./normalizers.js";
@@ -332,7 +332,7 @@ app.post("/schedules/digest", asyncRoute(async (req, res) => {
 }));
 app.post("/schedules/message", asyncRoute(async (req, res) => {
     const body = req.body;
-    const platform = requirePlatform(body.platform);
+    const platform = requireWritablePlatform(body.platform);
     const conversationId = requireString(body.conversation_id, "conversation_id");
     const text = requireString(body.text, "text");
     const scheduledFor = requireString(body.scheduled_for, "scheduled_for");
@@ -410,6 +410,28 @@ app.post("/schedules/run-due", asyncRoute(async (req, res) => {
 app.get("/workspace/status", asyncRoute(async (_req, res) => {
     res.json(await checkWorkspaceStatus());
 }));
+app.get("/wechat/sessions", asyncRoute(async (req, res) => {
+    const result = await listWechatSessions(optionalNumber(req.query.limit, 50));
+    await store.appendAudit({
+        action: "wechat.sessions",
+        tenant_id: tenantId(req),
+        platform: "wechat",
+        status: "read",
+        metadata: { limit: optionalNumber(req.query.limit, 50) }
+    });
+    res.json(result);
+}));
+app.get("/wechat/unread", asyncRoute(async (req, res) => {
+    const result = await listWechatUnread(optionalNumber(req.query.limit, 50), optionalString(req.query.filter));
+    await store.appendAudit({
+        action: "wechat.unread",
+        tenant_id: tenantId(req),
+        platform: "wechat",
+        status: "read",
+        metadata: { limit: optionalNumber(req.query.limit, 50), filter: optionalString(req.query.filter) }
+    });
+    res.json(result);
+}));
 app.post("/workspace/read", asyncRoute(async (req, res) => {
     const body = req.body;
     const result = await readWorkspaceResource({
@@ -460,7 +482,7 @@ app.post("/workspace/write", asyncRoute(async (req, res) => {
     res.json(result);
 }));
 app.get("/notifications/mentions", asyncRoute(async (req, res) => {
-    const platform = requirePlatform(req.query.platform);
+    const platform = requireWritablePlatform(req.query.platform);
     const result = await listMentionMessages({
         platform,
         conversation_id: optionalString(req.query.conversation_id),
@@ -478,7 +500,7 @@ app.get("/notifications/mentions", asyncRoute(async (req, res) => {
     res.json(result);
 }));
 app.get("/notifications/unread-conversations", asyncRoute(async (req, res) => {
-    const platform = requirePlatform(req.query.platform);
+    const platform = requireWritablePlatform(req.query.platform);
     const result = await listUnreadConversations({
         platform,
         limit: optionalNumber(req.query.limit, 50)
@@ -493,7 +515,7 @@ app.get("/notifications/unread-conversations", asyncRoute(async (req, res) => {
     res.json(result);
 }));
 app.get("/notifications/message-read-status", asyncRoute(async (req, res) => {
-    const platform = requirePlatform(req.query.platform);
+    const platform = requireWritablePlatform(req.query.platform);
     const result = await queryMessageReadStatus({
         platform,
         conversation_id: requireString(req.query.conversation_id, "conversation_id"),
@@ -511,7 +533,7 @@ app.get("/notifications/message-read-status", asyncRoute(async (req, res) => {
 }));
 app.post("/messages/send", asyncRoute(async (req, res) => {
     const body = req.body;
-    const platform = requirePlatform(body.platform);
+    const platform = requireWritablePlatform(body.platform);
     const conversationId = requireString(body.conversation_id, "conversation_id");
     const text = requireString(body.text, "text");
     await requireAuthorized(req, platform, conversationId);
@@ -738,6 +760,10 @@ app.get("/integrations/status", asyncRoute(async (_req, res) => {
                 history_sync: cli.dingtalk,
                 oa_approval: cli.dingtalk,
                 real_send: dryRunSend ? "dry_run" : cli.dingtalk
+            },
+            wechat: {
+                local_read: cli.wechat,
+                real_send: "not_supported"
             }
         },
         connector: {
@@ -1181,7 +1207,7 @@ async function runScheduledAction(req, schedule, execute) {
             };
         }
         const text = requireString(schedule.payload.text, "payload.text");
-        const platform = requirePlatform(schedule.platform);
+        const platform = requireWritablePlatform(schedule.platform);
         const conversationId = requireString(schedule.conversation_id, "conversation_id");
         if (!execute) {
             return { ...base, status: "preview_due", text_length: text.length };
@@ -1394,7 +1420,7 @@ async function requireAuthorized(req, platform, conversationId) {
     }
 }
 function optionalPlatform(value) {
-    if (value === "feishu" || value === "dingtalk") {
+    if (value === "feishu" || value === "dingtalk" || value === "wechat") {
         return value;
     }
     return undefined;
@@ -1408,7 +1434,20 @@ function optionalScheduleStatus(value) {
 function requirePlatform(value) {
     const platform = optionalPlatform(value);
     if (!platform) {
-        throw new Error("platform must be feishu or dingtalk");
+        throw new Error("platform must be feishu, dingtalk, or wechat");
+    }
+    return platform;
+}
+function optionalWritablePlatform(value) {
+    if (value === "feishu" || value === "dingtalk") {
+        return value;
+    }
+    return undefined;
+}
+function requireWritablePlatform(value) {
+    const platform = optionalWritablePlatform(value);
+    if (!platform) {
+        throw new Error("platform must be feishu or dingtalk for send/action tools");
     }
     return platform;
 }

@@ -2,7 +2,7 @@
 
 [English](./README.md) | 中文
 
-`cn-messaging-context` 是一个把 Codex / WorkBuddy 接入飞书、钉钉和腾讯文档工作上下文的插件包。
+`cn-messaging-context` 是一个把 Codex / WorkBuddy 接入飞书、钉钉、腾讯文档和本地微信聊天上下文的插件包。
 
 它的目标不是让 Codex 自己长期跑在聊天软件里，而是把能力分成三层：
 
@@ -13,6 +13,7 @@
 ## 能做什么
 
 - 查询飞书 / Lark、钉钉群聊和单聊消息。
+- 读取本机微信会话、未读、聊天历史、关键词搜索和新增消息。
 - 生成群聊日报、重点消息、决策、待办和风险。
 - 找出今天真正需要你看的 @ 消息、未读会话和待回复项。
 - 根据上下文草拟回复，但默认不发送。
@@ -42,6 +43,7 @@ npm run agent:install
 - 安装 `cn-messaging-context@personal`。
 - 生成 WorkBuddy MCP 配置。
 - 检查飞书 CLI、钉钉 DWS CLI、腾讯文档 OpenAPI 配置。
+- 检查微信本地 `wx-cli` 是否安装。
 
 只检查环境：
 
@@ -121,6 +123,26 @@ export TENCENT_DOCS_MCP_TOKEN=...
 curl http://127.0.0.1:8787/workspace/status
 ```
 
+### 微信本地聊天
+
+安装 `wx-cli`：
+
+```bash
+npm install -g @jackwener/wx-cli
+```
+
+初始化和检查：
+
+```bash
+wx --version
+sudo wx init
+wx sessions --json
+```
+
+首次初始化需要桌面微信已安装并登录。微信能力只读，不支持发送微信消息。
+
+参考：[jackwener/wx-cli](https://github.com/jackwener/wx-cli)。
+
 ## Codex 使用方式
 
 一键安装成功后，新开一个 Codex 会话即可使用。
@@ -130,6 +152,8 @@ curl http://127.0.0.1:8787/workspace/status
 - “总结飞书里昨天关于采购平台的讨论。”
 - “从钉钉项目群找最近三天的预算调整消息。”
 - “整理今天真正需要我看的钉钉消息。”
+- “从微信里找最近三天关于合同的讨论。”
+- “看看微信有哪些未读工作群。”
 - “看看钉钉 OA 有哪些待审批，先不要通过。”
 - “根据飞书上下文帮我起草回复，先别发。”
 - “把今天群聊摘要发布到飞书文档，先预览。”
@@ -174,6 +198,7 @@ CN_MESSAGING_STORE=sqlite npm run start:connector
 ## 安全边界
 
 - 默认先预览，不会真的发送消息、写文档或通过审批。
+- 微信本地能力只读取本机数据库，不发送消息。
 - 发送消息必须先展示平台、目标群/人和完整正文，并获得用户确认。
 - 写文档、表格、白板等外部资源前必须先确认目标、模式和内容摘要。
 - 通过钉钉 OA 审批前必须先展示审批标题、实例、任务和备注，并获得用户确认。

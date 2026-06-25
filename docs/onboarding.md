@@ -17,7 +17,7 @@ The install agent will:
 - Start the small local connector service.
 - Register and install the Codex personal plugin.
 - Generate a WorkBuddy MCP config file.
-- Check Feishu/Lark CLI, DingTalk DWS CLI, and Tencent Docs OpenAPI configuration.
+- Check Feishu/Lark CLI, DingTalk DWS CLI, Tencent Docs OpenAPI configuration, and local WeChat `wx-cli`.
 
 To only check your environment:
 
@@ -145,7 +145,32 @@ curl http://127.0.0.1:8787/workspace/status
 
 Reference: [Tencent Docs](https://docs.qq.com/).
 
-## 5. Codex Installation
+## 5. Local WeChat wx-cli
+
+Install:
+
+```bash
+npm install -g @jackwener/wx-cli
+```
+
+Initialize and check:
+
+```bash
+wx --version
+sudo wx init
+wx sessions --json
+```
+
+Notes:
+
+- Desktop WeChat must be installed and logged in before initialization.
+- First-time initialization reads the local WeChat database key and may require macOS signing steps documented by `wx-cli`.
+- This plugin only reads local WeChat context. It does not send WeChat messages.
+- Do not upload `~/.wx-cli/config.json`, `all_keys.json`, cache databases, or raw WeChat data.
+
+Reference: [jackwener/wx-cli](https://github.com/jackwener/wx-cli).
+
+## 6. Codex Installation
 
 The install agent handles this automatically. Manual steps are:
 
@@ -164,7 +189,7 @@ npm run agent:install -- --codex-only
 
 Then open a new Codex session.
 
-## 6. WorkBuddy Installation
+## 7. WorkBuddy Installation
 
 The install agent writes a WorkBuddy MCP config file under the plugin data directory. It looks like:
 
@@ -186,7 +211,7 @@ The install agent writes a WorkBuddy MCP config file under the plugin data direc
 
 Copy that block into WorkBuddy's MCP settings and keep the connector service running.
 
-## 7. First Test Prompts
+## 8. First Test Prompts
 
 Try read-only tasks first:
 
@@ -194,6 +219,8 @@ Try read-only tasks first:
 - "列出今天真正 @ 我的飞书和钉钉消息。"
 - "看看钉钉有哪些待审批，先不要通过。"
 - "读取这份腾讯文档在线表格并总结。"
+- "看看微信有哪些未读工作群。"
+- "从微信里找最近三天关于合同的讨论。"
 
 Then try write or action tasks only after confirming preview-first mode:
 

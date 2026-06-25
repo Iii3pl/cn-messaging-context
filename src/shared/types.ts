@@ -1,4 +1,5 @@
-export type Platform = "feishu" | "dingtalk";
+export type Platform = "feishu" | "dingtalk" | "wechat";
+export type WritablePlatform = "feishu" | "dingtalk";
 export type WorkspaceProvider = Platform | "tencent";
 export type AccessIdentity = "auto" | "bot" | "user";
 export type WorkspaceResourceKind =

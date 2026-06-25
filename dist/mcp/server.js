@@ -3,7 +3,8 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { appendQuery, jsonText } from "../shared/http.js";
 const connectorUrl = process.env.CN_MESSAGING_CONNECTOR_URL ?? "http://127.0.0.1:8787";
-const platformSchema = z.enum(["feishu", "dingtalk"]);
+const platformSchema = z.enum(["feishu", "dingtalk", "wechat"]);
+const writablePlatformSchema = z.enum(["feishu", "dingtalk"]);
 const workspaceProviderSchema = z.enum(["feishu", "dingtalk", "tencent"]);
 const workspaceKindSchema = z.enum(["doc", "sheet", "base", "whiteboard", "slide", "smartcanvas", "smartsheet", "board", "mind", "flowchart"]);
 const accessIdentitySchema = z.enum(["auto", "bot", "user"]);
@@ -35,11 +36,11 @@ function textResult(value) {
 }
 const server = new McpServer({
     name: "cn-messaging-context",
-    version: "0.7.0"
+    version: "0.9.0"
 });
 server.registerTool("list_conversations", {
     title: "List conversations",
-    description: "List authorized Feishu or DingTalk conversations known to the connector service.",
+    description: "List authorized Feishu, DingTalk, or local WeChat conversations known to the connector service.",
     inputSchema: {
         platform: platformSchema.optional(),
         query: z.string().optional(),
@@ -48,7 +49,7 @@ server.registerTool("list_conversations", {
 }, async (args) => textResult(await connectorRequest(appendQuery("/conversations", args))));
 server.registerTool("search_messages", {
     title: "Search messages",
-    description: "Search normalized Feishu or DingTalk messages by platform, conversation, keyword, sender, and time window.",
+    description: "Search normalized Feishu, DingTalk, or local WeChat messages by platform, conversation, keyword, sender, and time window.",
     inputSchema: {
         platform: platformSchema.optional(),
         conversation_id: z.string().optional(),
@@ -71,7 +72,7 @@ server.registerTool("get_recent_context", {
 }, async (args) => textResult(await connectorRequest(appendQuery("/messages/recent", args))));
 server.registerTool("read_native_thread", {
     title: "Read native message thread",
-    description: "Read a platform-native Feishu or DingTalk thread when thread/root/parent ids are available in synced messages.",
+    description: "Read a platform-native or stored Feishu, DingTalk, or WeChat thread when thread/root/parent ids are available in synced messages.",
     inputSchema: {
         platform: platformSchema,
         conversation_id: z.string().optional(),
@@ -112,7 +113,7 @@ server.registerTool("create_conversation_report", {
 })));
 server.registerTool("draft_reply", {
     title: "Draft reply",
-    description: "Draft a Feishu or DingTalk reply from supplied intent and connector context. This does not send.",
+    description: "Draft a reply from supplied Feishu, DingTalk, or WeChat connector context. This does not send.",
     inputSchema: {
         platform: platformSchema,
         conversation_id: z.string(),
@@ -134,7 +135,7 @@ const workflowSchema = {
 };
 server.registerTool("create_daily_digest", {
     title: "Create daily digest",
-    description: "Create a Slack-style daily digest across selected Feishu or DingTalk conversations or topics.",
+    description: "Create a Slack-style daily digest across selected Feishu, DingTalk, or WeChat conversations or topics.",
     inputSchema: {
         ...workflowSchema,
         include_messages: z.boolean().default(false)
@@ -304,7 +305,7 @@ server.registerTool("list_real_mentions", {
     title: "List real mentions",
     description: "Read platform-native messages that mention the current user from Feishu/Lark or DingTalk.",
     inputSchema: {
-        platform: platformSchema,
+        platform: writablePlatformSchema,
         conversation_id: z.string().optional(),
         since: timestampSchema.optional(),
         until: timestampSchema.optional(),
@@ -315,7 +316,7 @@ server.registerTool("list_unread_conversations", {
     title: "List unread conversations",
     description: "Read platform-native unread conversation/feed state from Feishu/Lark or DingTalk where available.",
     inputSchema: {
-        platform: platformSchema,
+        platform: writablePlatformSchema,
         limit: z.number().int().min(1).max(200).default(50)
     }
 }, async (args) => textResult(await connectorRequest(appendQuery("/notifications/unread-conversations", args))));
@@ -323,11 +324,26 @@ server.registerTool("query_message_read_status", {
     title: "Query message read status",
     description: "Query platform-native message read status when the platform adapter supports it.",
     inputSchema: {
-        platform: platformSchema,
+        platform: writablePlatformSchema,
         conversation_id: z.string(),
         message_id: z.string()
     }
 }, async (args) => textResult(await connectorRequest(appendQuery("/notifications/message-read-status", args))));
+server.registerTool("list_wechat_sessions", {
+    title: "List local WeChat sessions",
+    description: "List local WeChat sessions through wx-cli. This is read-only and uses the user's local WeChat database.",
+    inputSchema: {
+        limit: z.number().int().min(1).max(200).default(50)
+    }
+}, async (args) => textResult(await connectorRequest(appendQuery("/wechat/sessions", args))));
+server.registerTool("list_wechat_unread", {
+    title: "List local WeChat unread sessions",
+    description: "List local WeChat unread sessions through wx-cli. This is read-only.",
+    inputSchema: {
+        filter: z.enum(["private", "group", "official", "folded", "all"]).optional(),
+        limit: z.number().int().min(1).max(200).default(50)
+    }
+}, async (args) => textResult(await connectorRequest(appendQuery("/wechat/unread", args))));
 server.registerTool("schedule_daily_digest", {
     title: "Schedule daily digest",
     description: "Create a pending schedule record for a future daily digest. This does not run in the background by itself.",
@@ -344,7 +360,7 @@ server.registerTool("schedule_message", {
     title: "Schedule confirmed message",
     description: "Create a pending schedule record for a Feishu or DingTalk message after explicit user confirmation. This does not send immediately.",
     inputSchema: {
-        platform: platformSchema,
+        platform: writablePlatformSchema,
         conversation_id: z.string(),
         conversation_name: z.string().optional(),
         text: z.string().min(1),
@@ -393,7 +409,7 @@ server.registerTool("run_due_scheduled_actions", {
 })));
 server.registerTool("sync_history", {
     title: "Sync platform history",
-    description: "Fetch real Feishu or DingTalk history through the local platform adapter and store normalized messages. Feishu user permission fallback requires explicit user consent.",
+    description: "Fetch real Feishu, DingTalk, or local WeChat history through the local platform adapter and store normalized messages. Feishu user permission fallback requires explicit user consent.",
     inputSchema: {
         platform: platformSchema,
         conversation_id: z.string().optional(),
@@ -412,7 +428,7 @@ server.registerTool("sync_history", {
 })));
 server.registerTool("upsert_identity_mapping", {
     title: "Upsert identity mapping",
-    description: "Map one Feishu or DingTalk user id/name to a canonical person for cross-platform triage and reply routing.",
+    description: "Map one Feishu, DingTalk, or WeChat user id/name to a canonical person for cross-platform triage and reply routing.",
     inputSchema: {
         canonical_user: z.string().min(1),
         display_name: z.string().optional(),
@@ -427,7 +443,7 @@ server.registerTool("upsert_identity_mapping", {
 })));
 server.registerTool("list_identity_mappings", {
     title: "List identity mappings",
-    description: "List canonical user mappings used for cross-platform Feishu/DingTalk notification triage.",
+    description: "List canonical user mappings used for cross-platform Feishu/DingTalk/WeChat notification triage.",
     inputSchema: {
         platform: platformSchema.optional(),
         canonical_user: z.string().optional(),
@@ -459,7 +475,7 @@ server.registerTool("send_message", {
     title: "Send confirmed message",
     description: "Send a Feishu or DingTalk message only after Codex has shown the destination and exact text and the user confirmed.",
     inputSchema: {
-        platform: platformSchema,
+        platform: writablePlatformSchema,
         conversation_id: z.string(),
         text: z.string().min(1),
         confirmed_by_user: z.boolean(),

@@ -1,14 +1,18 @@
 import { spawn } from "node:child_process";
 export async function checkCliStatus() {
-    const [lark, dws] = await Promise.all([commandExists("lark-cli"), commandExists("dws")]);
+    const [lark, dws, wx] = await Promise.all([commandExists("lark-cli"), commandExists("dws"), commandExists("wx")]);
     return {
         feishu: { cli: lark ? "available" : "missing", command: "lark-cli" },
-        dingtalk: { cli: dws ? "available" : "missing", command: "dws" }
+        dingtalk: { cli: dws ? "available" : "missing", command: "dws" },
+        wechat: { cli: wx ? "available" : "missing", command: "wx" }
     };
 }
 export async function syncHistoryFromCli(request) {
     if (request.platform === "feishu") {
         return syncFeishuHistory(request);
+    }
+    if (request.platform === "wechat") {
+        return syncWechatHistory(request);
     }
     return syncDingTalkHistory(request);
 }
@@ -139,28 +143,77 @@ async function syncDingTalkHistory(request) {
     const raw = await runJson("dws", args);
     return extractDingTalkMessages(raw).map((item) => normalizeCliMessage("dingtalk", item, request.tenant_id));
 }
+async function syncWechatHistory(request) {
+    const args = request.query
+        ? ["search", request.query, "--json"]
+        : request.conversation_id
+            ? ["history", request.conversation_id, "--json", "-n", String(request.limit ?? 50)]
+            : ["new-messages", "--json"];
+    if (request.query && request.conversation_id) {
+        args.push("--in", request.conversation_id);
+    }
+    if (request.since) {
+        args.push("--since", request.since);
+    }
+    if (request.until) {
+        args.push("--until", request.until);
+    }
+    const raw = await runWechatJson(args);
+    return extractArray(raw).slice(0, request.limit ?? 50).map((item) => {
+        const message = normalizeCliMessage("wechat", item, request.tenant_id);
+        if (request.conversation_id && message.conversation_id.startsWith("unknown-wechat")) {
+            message.conversation_id = request.conversation_id;
+        }
+        return message;
+    });
+}
+export async function listWechatSessions(limit) {
+    const raw = await runWechatJson(["sessions", "--json"]);
+    return { sessions: extractArray(raw).slice(0, limit), raw_result: raw };
+}
+export async function listWechatUnread(limit, filter) {
+    const args = ["unread", "--json"];
+    if (filter) {
+        args.push("--filter", filter);
+    }
+    const raw = await runWechatJson(args);
+    return { unread: extractArray(raw).slice(0, limit), raw_result: raw };
+}
+async function runWechatJson(args) {
+    try {
+        const output = await run("wx", args, { parseJson: true, timeoutMs: 180000 });
+        return JSON.parse(output);
+    }
+    catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (/file is not a database|not a database|no such table|database disk image is malformed|密钥|decrypt|database/i.test(message)) {
+            throw new Error("微信本地数据库还不能读取。请确认桌面微信已登录，然后运行 `sudo wx init --force` 重新初始化 wx-cli。");
+        }
+        throw error;
+    }
+}
 function normalizeCliMessage(platform, item, tenantId) {
     const data = item;
-    const conversationId = firstString(data.conversation_id, data.conversationId, data.chat_id, data.chatId, data.openConversationId);
-    const messageId = firstString(data.message_id, data.messageId, data.msgId, data.openMessageId, data.id);
+    const conversationId = firstString(data.conversation_id, data.conversationId, data.chat_id, data.chatId, data.openConversationId, data.username, data.talker, data.chat, data.room_id, data.roomId);
+    const messageId = firstString(data.message_id, data.messageId, data.msgId, data.msg_id, data.openMessageId, data.local_id, data.localId, data.server_id, data.serverId, data.id);
     const threadId = firstString(data.thread_id, data.threadId, data.root_id, data.rootId, data.parent_id, data.parentMessageId, data.parentMsgId);
     const parentMessageId = firstString(data.parent_message_id, data.parentMessageId, data.parentMsgId, data.parent_id, data.root_id, data.rootId);
-    const sender = firstString(data.sender, data.senderNick, data.sender_name, data.from, data.senderUserId, data.senderStaffId, data.senderOpenDingTalkId);
-    const text = firstString(data.text, data.content, data.message, nestedText(data.content), nestedText(data.text));
-    const timestamp = firstString(data.timestamp, data.create_time, data.createTime, data.createAt, data.sendTime);
+    const sender = firstString(data.sender, data.senderNick, data.sender_name, data.senderName, data.from, data.from_user, data.fromUser, data.senderUserId, data.senderStaffId, data.senderOpenDingTalkId, data.sender_username, data.senderUsername, data.talker);
+    const text = firstString(data.text, data.content, data.message, data.msg, data.body, nestedText(data.content), nestedText(data.text));
+    const timestamp = firstString(data.timestamp, data.create_time, data.createTime, data.createAt, data.sendTime, data.time, data.datetime);
     const replyCount = firstNumber(data.reply_count, data.replyCount, data.replies);
     return {
         tenant_id: tenantId,
         platform,
         conversation_id: conversationId ?? `unknown-${platform}-conversation`,
-        conversation_name: firstString(data.conversation_name, data.conversationTitle, data.chat_name, data.chatName, data.title),
+        conversation_name: firstString(data.conversation_name, data.conversationTitle, data.chat_name, data.chatName, data.nickname, data.remark, data.title, data.name),
         message_id: messageId ?? `${platform}-${JSON.stringify(item).length}-${Date.now()}`,
         thread_id: threadId,
         parent_message_id: parentMessageId,
         reply_count: replyCount,
         is_thread_parent: replyCount === undefined ? undefined : replyCount > 0,
         sender: sender ?? "unknown",
-        sender_id: firstString(data.sender_id, data.senderUserId, data.senderStaffId),
+        sender_id: firstString(data.sender_id, data.senderUserId, data.senderStaffId, data.sender_username, data.senderUsername, data.from_user, data.fromUser),
         mentions: extractMentions(data),
         text: text ?? "",
         timestamp: timestampToIso(timestamp),

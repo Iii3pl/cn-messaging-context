@@ -1,4 +1,4 @@
-import type { AccessIdentity, ApprovalRecord, MessageRecord, Platform } from "../../shared/types.js";
+import type { AccessIdentity, ApprovalRecord, MessageRecord, Platform, WritablePlatform } from "../../shared/types.js";
 export interface AdapterStatus {
     cli: "available" | "missing";
     command: string;
@@ -25,10 +25,11 @@ export interface HistorySyncRequest {
 export declare function checkCliStatus(): Promise<{
     feishu: AdapterStatus;
     dingtalk: AdapterStatus;
+    wechat: AdapterStatus;
 }>;
 export declare function syncHistoryFromCli(request: HistorySyncRequest): Promise<MessageRecord[]>;
 export declare function sendMessageViaCli(input: {
-    platform: Platform;
+    platform: WritablePlatform;
     conversation_id: string;
     text: string;
     dry_run: boolean;
@@ -43,3 +44,5 @@ export declare function approveDingTalkApproval(input: {
     remark: string;
     dry_run: boolean;
 }): Promise<SendResult>;
+export declare function listWechatSessions(limit: number): Promise<unknown>;
+export declare function listWechatUnread(limit: number, filter?: string): Promise<unknown>;

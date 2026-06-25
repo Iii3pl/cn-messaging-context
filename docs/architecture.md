@@ -12,6 +12,7 @@ flowchart LR
   API --> FeishuUser["Feishu user-approved read"]
   API --> DingTalk["DingTalk app / bot / OA"]
   API --> Tencent["Tencent Docs OpenAPI / MCP bridge"]
+  API --> WeChat["Local WeChat wx-cli"]
   API --> GitHub["GitHub Issues"]
   Feishu --> Webhooks["Webhook receivers"]
   DingTalk --> Webhooks
@@ -29,6 +30,7 @@ flowchart LR
 - Workspace document layer: summaries and structured data can be published to Feishu/Lark docs/sheets/Base/whiteboards, DingTalk docs/sheets/AI tables, and Tencent Docs resources through connector-side credentials. Writes are dry-run by default.
 - Feishu/Lark user read fallback: bot/app access stays first. If it cannot read a group or workspace resource, Codex asks the user before retrying through user permission for that one read.
 - Native notification state: platform-native @me, unread conversation/feed, and read-status surfaces are exposed separately from text-based triage so Codex can label evidence correctly.
+- Local WeChat layer: `wx-cli` reads local desktop WeChat sessions, unread state, history, search results, and new messages. This layer is read-only and never sends WeChat messages.
 - Native/thread layer: the connector preserves platform thread/root/parent ids when adapters expose them, and falls back to inferred topic-centered timelines when native ids are unavailable.
 - Identity layer: Feishu/Lark and DingTalk user ids, display names, and aliases can be mapped to one canonical person so triage and reply workflows behave more like Slack's user-aware notification surfaces.
 - Schedule layer: scheduled digests and messages are stored as pending records. A worker can call `run_due_scheduled_actions` to preview or execute due records while keeping final sends behind explicit confirmation/audit policy.

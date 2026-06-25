@@ -2,13 +2,13 @@
 
 English | [中文](./README.zh-CN.md)
 
-`cn-messaging-context` is a Codex plugin pattern for Chinese workplace messaging and approvals:
+`cn-messaging-context` is a Codex plugin pattern for Chinese workplace messaging, local WeChat context, and approvals:
 
 - Codex plugin metadata and skills expose the user experience.
 - A stdio MCP server exposes bounded tools to Codex.
 - A separate connector service owns webhooks, token refresh, storage, search, and send adapters.
 
-This keeps long-running platform work out of Codex sessions while still letting Codex sync history, search, summarize, generate group-chat reports, create Slack-style daily digests, triage notifications, find reply candidates, draft reply queues, create summary documents, publish summaries to Feishu/Lark, DingTalk, or Tencent Docs resources, read/write docs/sheets/bases/whiteboards, fall back to user-approved Feishu/Lark read permission when bot access is insufficient, read native mention/unread state, read native or topic-inferred threads, map cross-platform identities, run due schedule records, safely send confirmed messages, read or approve confirmed DingTalk OA items, and report connector errors as redacted GitHub Issues.
+This keeps long-running platform work out of Codex sessions while still letting Codex sync history, search, summarize, generate group-chat reports, create Slack-style daily digests, triage notifications, find reply candidates, draft reply queues, create summary documents, publish summaries to Feishu/Lark, DingTalk, or Tencent Docs resources, read/write docs/sheets/bases/whiteboards, read local WeChat sessions/history/search results through `wx-cli`, fall back to user-approved Feishu/Lark read permission when bot access is insufficient, read native mention/unread state, read native or topic-inferred threads, map cross-platform identities, run due schedule records, safely send confirmed messages, read or approve confirmed DingTalk OA items, and report connector errors as redacted GitHub Issues.
 
 ## Structure
 
@@ -72,6 +72,8 @@ Set `CN_MESSAGING_STORE=sqlite` to use the production-style local SQLite store w
 - `list_real_mentions`
 - `list_unread_conversations`
 - `query_message_read_status`
+- `list_wechat_sessions`
+- `list_wechat_unread`
 - `schedule_daily_digest`
 - `schedule_message`
 - `list_scheduled_actions`
@@ -104,6 +106,7 @@ The plugin includes Slack-inspired workflows adapted for Feishu/Lark and DingTal
 - Reply drafting: find likely response candidates and prepare draft-only replies.
 - Summary document: Markdown document similar to a Slack Canvas recap.
 - Workspace publishing: publish reports or structured data to Feishu/Lark docs, sheets, Base/smartsheet, whiteboards; DingTalk docs, sheets, AI tables; and Tencent Docs resources through OpenAPI/MCP bridge configuration.
+- Local WeChat context: read sessions, unread chats, history, search results, and new messages through `wx-cli`. This is read-only and never sends WeChat messages.
 - User-approved Feishu/Lark reads: if bot/app access cannot read a group or workspace resource, Codex asks before retrying through the user's own read permission for that single task.
 - Native mention state: read platform-native @me, unread conversation/feed state, and message read-status surfaces where supported.
 - Native/thread map: read platform-native threads when thread/root ids are available, or fall back to topic-centered timelines with decisions and blockers.

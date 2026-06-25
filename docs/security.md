@@ -14,6 +14,7 @@
 - Store only work identity handles needed for routing when using identity mappings. Do not store private phone numbers, tokens, cookies, or unrelated personal data as aliases.
 - Keep Tencent Docs OAuth/OpenAPI credentials and MCP tokens in connector-service environment or secret storage only.
 - Keep GitHub tokens outside plugin files. Error reports must redact tokens, cookies, webhook signatures, secrets, authorization headers, long numeric ids, and phone-like values before creating Issues.
+- Keep local WeChat `wx-cli` config, database keys, cache files, and raw chat databases on the user's machine. Do not attach them to GitHub Issues, logs, Codex context, or plugin files.
 
 ## Feishu/Lark User Read Safety
 
@@ -31,6 +32,15 @@ Do not silently keep user permission enabled for later unrelated requests.
 Issue reporting defaults to preview mode through `CN_MESSAGING_ISSUE_DRY_RUN=true`. To create real Issues automatically, production deployments must deliberately set `CN_MESSAGING_AUTO_ISSUES=true` and `CN_MESSAGING_ISSUE_DRY_RUN=false`.
 
 Issue bodies should include route, operation, safe request summary, and sanitized error text. They should not include full chat history, full document content, tokens, secrets, cookies, private keys, or webhook signatures.
+
+## Local WeChat Safety
+
+WeChat support is read-only and local. Production or shared deployments must:
+
+- Require the user to initialize `wx-cli` locally.
+- Avoid copying `~/.wx-cli/config.json`, `all_keys.json`, daemon sockets, cache databases, or raw WeChat database files.
+- Store only normalized message records needed for the requested summary/search.
+- Never use this plugin to send WeChat messages.
 
 ## Workspace Write Safety
 

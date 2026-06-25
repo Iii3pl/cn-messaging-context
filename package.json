@@ -1,9 +1,9 @@
 {
   "name": "cn-messaging-context",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "private": true,
   "type": "module",
-  "description": "Codex plugin, MCP server, and connector service for Feishu, Lark, DingTalk, Tencent Docs workspace publishing, native notification state, messages, approvals, and Slack-style workflows.",
+  "description": "Codex plugin, MCP server, and connector service for Feishu, Lark, DingTalk, local WeChat, Tencent Docs workspace publishing, native notification state, messages, approvals, and Slack-style workflows.",
   "scripts": {
     "agent:install": "node scripts/install-agent.mjs",
     "build": "tsc -p tsconfig.json",

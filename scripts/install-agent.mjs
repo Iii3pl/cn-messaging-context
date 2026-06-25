@@ -137,7 +137,7 @@ function printHelp() {
     "  npm run agent:install -- --install-platform-cli",
     "",
     "它会完成：安装依赖、构建插件、准备本机插件目录、启动插件小服务、安装到 Codex、生成 WorkBuddy MCP 配置。",
-    "它也会检查飞书 lark-cli、钉钉 dws、腾讯文档 OpenAPI 配置，并告诉新人下一步。"
+    "它也会检查飞书 lark-cli、钉钉 dws、腾讯文档 OpenAPI、微信 wx-cli 配置，并告诉新人下一步。"
   ].join("\n"));
 }
 
@@ -175,7 +175,8 @@ function checkPlatformCliStatus() {
     tencent: {
       ok: Boolean(process.env.TENCENT_DOCS_ACCESS_TOKEN && process.env.TENCENT_DOCS_OPEN_ID),
       version: undefined
-    }
+    },
+    wechat: commandAvailable("wx")
   };
 }
 
@@ -185,7 +186,8 @@ function printPlatformStatus(status) {
   console.log(`- 飞书/Lark CLI：${status.feishu.ok ? `已安装 ${status.feishu.version ?? ""}` : "还没装好"}`);
   console.log(`- 钉钉 DWS CLI：${status.dingtalk.ok ? `已安装 ${status.dingtalk.version ?? ""}` : "还没装好"}`);
   console.log(`- 腾讯文档 OpenAPI：${status.tencent.ok ? "已配置基础凭据" : "还没配置 TENCENT_DOCS_ACCESS_TOKEN / TENCENT_DOCS_OPEN_ID"}`);
-  if (!status.feishu.ok || !status.dingtalk.ok || !status.tencent.ok) {
+  console.log(`- 微信本地 wx-cli：${status.wechat.ok ? `已安装 ${status.wechat.version ?? ""}` : "还没装好"}`);
+  if (!status.feishu.ok || !status.dingtalk.ok || !status.tencent.ok || !status.wechat.ok) {
     console.log("");
     console.log("新人下一步：");
     if (!status.feishu.ok) {
@@ -196,6 +198,9 @@ function printPlatformStatus(status) {
     }
     if (!status.tencent.ok) {
       console.log("- 腾讯文档：到腾讯文档开放平台准备 OAuth/OpenAPI 凭据，再把 `TENCENT_DOCS_ACCESS_TOKEN` 和 `TENCENT_DOCS_OPEN_ID` 放到插件小服务环境里。");
+    }
+    if (!status.wechat.ok) {
+      console.log("- 微信本地：运行 `npm install -g @jackwener/wx-cli`，登录桌面微信后按提示运行 `sudo wx init`。");
     }
     console.log("- 想看完整步骤：`npm run agent:install -- --guide`。");
   }
@@ -210,10 +215,15 @@ async function installMissingPlatformCli(status) {
     step("安装钉钉 DWS CLI");
     await run("npm", ["install", "-g", "dingtalk-workspace-cli"], { cwd: repoRoot });
   }
+  if (!status.wechat.ok) {
+    step("安装微信本地 wx-cli");
+    await run("npm", ["install", "-g", "@jackwener/wx-cli"], { cwd: repoRoot });
+  }
   console.log("");
   console.log("平台 CLI 安装尝试已完成。接下来仍需要用户在浏览器里完成登录授权：");
   console.log("- 飞书：lark-cli config init && lark-cli auth login --recommend");
   console.log("- 钉钉：dws auth login && dws doctor");
+  console.log("- 微信本地：确认桌面微信已登录，然后按需运行 sudo wx init。");
 }
 
 function printPlatformGuide() {
@@ -260,13 +270,22 @@ function printPlatformGuide() {
     "```",
     "- 然后重启插件小服务，再用 `check_workspace_status` 检查。",
     "",
-    "第 6 步：验证",
+    "第 6 步：安装并初始化微信本地 wx-cli",
+    "```bash",
+    "npm install -g @jackwener/wx-cli",
+    "wx --version",
+    "sudo wx init",
+    "wx sessions --json",
+    "```",
+    "首次初始化需要桌面微信已安装并登录；微信本地能力只读取本机数据库，不支持发送。",
+    "",
+    "第 7 步：验证",
     "```bash",
     "npm run agent:install -- --check-only",
     "curl http://127.0.0.1:8787/health",
     "```",
     "",
-    "安全提醒：默认先预览，不会真的发送消息、写文档或通过审批。"
+    "安全提醒：默认先预览，不会真的发送消息、写文档或通过审批；微信本地能力只读。"
   ].join("\n"));
 }
 

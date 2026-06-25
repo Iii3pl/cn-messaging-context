@@ -10,7 +10,7 @@ cd cn-messaging-context
 npm run agent:install
 ```
 
-This starts a guided install that prepares Codex and WorkBuddy, checks platform CLIs, and keeps write actions in preview-first mode. See [New User Setup Guide](./onboarding.md).
+This starts a guided install that prepares Codex and WorkBuddy, checks platform CLIs and local WeChat `wx-cli`, and keeps write actions in preview-first mode. See [New User Setup Guide](./onboarding.md).
 
 Useful installer variants:
 
@@ -74,6 +74,14 @@ In plain language: this starts the small local helper service that Codex talks t
 - Optional: `TENCENT_DOCS_CLIENT_ID`, `TENCENT_DOCS_API_BASE`, `TENCENT_DOCS_MCP_TOKEN`.
 - Restart the connector after changing credentials, then run `check_workspace_status`.
 
+### Local WeChat
+
+- Install `wx-cli`: `npm install -g @jackwener/wx-cli`.
+- Desktop WeChat must be installed and logged in.
+- First-time setup: `sudo wx init`.
+- Verify with `wx sessions --json`.
+- WeChat support is local and read-only. It does not send messages.
+
 ## Runtime Flags
 
 | Variable | Default | Purpose |
@@ -97,6 +105,8 @@ In plain language: this starts the small local helper service that Codex talks t
 - Feishu bot events are accepted only with valid signatures when a secret is configured.
 - DingTalk bot events are accepted only with valid signatures when a secret is configured.
 - `sync_history` imports a bounded time window.
+- `sync_history` with `platform: "wechat"` imports local WeChat history/search/new messages through `wx-cli`.
+- `list_wechat_sessions` and `list_wechat_unread` return local WeChat session surfaces.
 - Feishu/Lark user fallback refuses to run unless the user has agreed in the current task.
 - `check_issue_reporter_status` and `report_connector_issue` can preview a redacted GitHub problem report.
 - `create_conversation_report` returns key messages, decisions, follow-ups, and risks.

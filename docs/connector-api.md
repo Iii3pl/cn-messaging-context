@@ -37,11 +37,17 @@ Imports a bounded history window through the configured platform adapter.
 
 For Feishu/Lark, `access_identity` can be `auto`, `bot`, or `user`. User permission is read-only and requires `user_consent_confirmed: true`; otherwise the connector rejects the call.
 
+For local WeChat, use `platform: "wechat"`. The connector calls `wx-cli`:
+
+- With `query`: `wx search <query> --json`
+- With `conversation_id`: `wx history <conversation_id> --json`
+- Without both: `wx new-messages --json`
+
 ### `GET /conversations`
 
 Query parameters:
 
-- `platform`: `feishu` or `dingtalk`
+- `platform`: `feishu`, `dingtalk`, or `wechat`
 - `query`: optional text filter
 - `limit`: default `50`
 
@@ -70,7 +76,7 @@ Query parameters:
 
 Query parameters:
 
-- `platform`: `feishu` or `dingtalk`
+- `platform`: `feishu`, `dingtalk`, or `wechat`
 - `conversation_id`: optional but recommended for authorization and faster lookup
 - `thread_id`: platform native thread/root id, when known
 - `message_id`: anchor message id, used when `thread_id` is unknown
@@ -314,6 +320,23 @@ Examples:
 ```
 
 ## Native Notification APIs
+
+### `GET /wechat/sessions`
+
+Query parameters:
+
+- `limit`: default `50`
+
+Lists local WeChat sessions through `wx sessions --json`. Requires `wx-cli` to be installed and initialized on the local machine.
+
+### `GET /wechat/unread`
+
+Query parameters:
+
+- `filter`: optional `private`, `group`, `official`, `folded`, or `all`
+- `limit`: default `50`
+
+Lists local WeChat unread sessions through `wx unread --json`. This is read-only and does not send WeChat messages.
 
 ### `GET /notifications/mentions`
 
