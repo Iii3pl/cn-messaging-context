@@ -1,4 +1,16 @@
 export type Platform = "feishu" | "dingtalk";
+export type WorkspaceProvider = Platform | "tencent";
+export type WorkspaceResourceKind =
+  | "doc"
+  | "sheet"
+  | "base"
+  | "whiteboard"
+  | "slide"
+  | "smartcanvas"
+  | "smartsheet"
+  | "board"
+  | "mind"
+  | "flowchart";
 
 export interface MessageRecord {
   tenant_id?: string;
@@ -75,4 +87,23 @@ export interface ApprovalRecord {
   status?: string;
   create_time?: string;
   raw_payload?: unknown;
+}
+
+export interface WorkspaceResourceResult {
+  provider: WorkspaceProvider;
+  kind: WorkspaceResourceKind;
+  action: "read" | "write" | "publish";
+  dry_run: boolean;
+  adapter: string;
+  target?: string;
+  raw_result?: unknown;
+  diagnostic?: string;
+}
+
+export interface MentionStateResult {
+  platform: Platform;
+  source: "mentions" | "unread_conversations" | "read_status";
+  adapter: string;
+  raw_result: unknown;
+  normalized?: unknown[];
 }

@@ -1,6 +1,7 @@
 import express from "express";
 import path from "node:path";
 import { approveDingTalkApproval, checkCliStatus, getDingTalkApprovalDetail, getDingTalkApprovalRecords, getDingTalkApprovalTasks, listDingTalkPendingApprovals, sendMessageViaCli, syncHistoryFromCli } from "./adapters/cli.js";
+import { checkWorkspaceStatus, listMentionMessages, listUnreadConversations, queryMessageReadStatus, readWorkspaceResource, writeWorkspaceResource } from "./adapters/workspace.js";
 import { normalizeDingTalkEvent, normalizeFeishuEvent } from "./normalizers.js";
 import { rawBodySaver, verifyOptionalHmacSignature } from "./security.js";
 import { SqliteStore } from "./sqlite-store.js";
@@ -9,6 +10,7 @@ const port = Number(process.env.PORT ?? 8787);
 const dataDir = process.env.CN_MESSAGING_DATA_DIR ?? path.resolve(process.cwd(), ".data");
 const storeMode = process.env.CN_MESSAGING_STORE ?? "jsonl";
 const dryRunSend = process.env.CN_MESSAGING_DRY_RUN !== "false";
+const dryRunWorkspace = process.env.CN_WORKSPACE_DRY_RUN !== "false";
 const enforceAuthorization = process.env.CN_MESSAGING_ENFORCE_AUTH === "true";
 const store = storeMode === "sqlite" ? new SqliteStore(dataDir) : new JsonlStore(dataDir);
 await store.ensure();
@@ -244,6 +246,50 @@ app.post("/workflows/summary-doc", asyncRoute(async (req, res) => {
     });
     res.json({ message_count: messages.length, document });
 }));
+app.post("/workflows/summary-doc/publish", asyncRoute(async (req, res) => {
+    const body = req.body;
+    if (!body.confirmed_by_user) {
+        res.status(400).json({ error: "user_confirmation_required" });
+        return;
+    }
+    const messages = await getWorkflowMessages(req, body);
+    const digest = buildDailyDigest(messages, body);
+    const currentUserTerms = await resolveUserTerms(req, body.current_user);
+    const triage = buildNotificationTriage(messages, currentUserTerms, false);
+    const candidates = findReplyCandidates(messages, currentUserTerms).slice(0, 10);
+    const document = buildSummaryDocument({
+        title: body.title,
+        messages,
+        digest,
+        triage,
+        candidates,
+        since: body.since,
+        until: body.until,
+        topics: body.topics
+    });
+    const writeResult = await writeWorkspaceResource({
+        ...body,
+        provider: requireWorkspaceProvider(body.provider),
+        kind: requireWorkspaceKind(body.kind),
+        mode: body.mode ?? "create",
+        title: body.title ?? `团队消息工作台摘要 ${new Date().toISOString().slice(0, 10)}`,
+        content: document,
+        dry_run: dryRunWorkspace
+    });
+    await store.appendAudit({
+        action: "workspace.summary_doc.publish",
+        tenant_id: tenantId(req),
+        status: writeResult.dry_run ? "dry_run" : "submitted",
+        metadata: {
+            provider: body.provider,
+            kind: body.kind,
+            message_count: messages.length,
+            title: body.title,
+            confirmation_summary: body.confirmation_summary
+        }
+    });
+    res.json({ message_count: messages.length, document, publish: writeResult });
+}));
 app.post("/workflows/topic-map", asyncRoute(async (req, res) => {
     const body = req.body;
     const messages = await getWorkflowMessages(req, body);
@@ -359,6 +405,101 @@ app.post("/schedules/run-due", asyncRoute(async (req, res) => {
         results.push(await runScheduledAction(req, schedule, Boolean(body.execute)));
     }
     res.json({ now, execute: Boolean(body.execute), due_count: due.length, results });
+}));
+app.get("/workspace/status", asyncRoute(async (_req, res) => {
+    res.json(await checkWorkspaceStatus());
+}));
+app.post("/workspace/read", asyncRoute(async (req, res) => {
+    const body = req.body;
+    const result = await readWorkspaceResource({
+        ...body,
+        provider: requireWorkspaceProvider(body.provider),
+        kind: requireWorkspaceKind(body.kind)
+    });
+    await store.appendAudit({
+        action: "workspace.read",
+        tenant_id: tenantId(req),
+        status: "read",
+        metadata: { provider: result.provider, kind: result.kind, target: result.target, adapter: result.adapter }
+    });
+    res.json(result);
+}));
+app.post("/workspace/write", asyncRoute(async (req, res) => {
+    const body = req.body;
+    if (!body.confirmed_by_user) {
+        res.status(400).json({ error: "user_confirmation_required" });
+        return;
+    }
+    const result = await writeWorkspaceResource({
+        ...body,
+        provider: requireWorkspaceProvider(body.provider),
+        kind: requireWorkspaceKind(body.kind),
+        dry_run: dryRunWorkspace
+    });
+    await store.appendAudit({
+        action: "workspace.write",
+        tenant_id: tenantId(req),
+        status: result.dry_run ? "dry_run" : "submitted",
+        metadata: {
+            provider: result.provider,
+            kind: result.kind,
+            target: result.target,
+            mode: body.mode,
+            adapter: result.adapter,
+            confirmation_summary: body.confirmation_summary
+        }
+    });
+    res.json(result);
+}));
+app.get("/notifications/mentions", asyncRoute(async (req, res) => {
+    const platform = requirePlatform(req.query.platform);
+    const result = await listMentionMessages({
+        platform,
+        conversation_id: optionalString(req.query.conversation_id),
+        since: optionalString(req.query.since),
+        until: optionalString(req.query.until),
+        limit: optionalNumber(req.query.limit, 50)
+    });
+    await store.appendAudit({
+        action: "notifications.mentions",
+        tenant_id: tenantId(req),
+        platform,
+        status: "read",
+        metadata: { source: result.source, adapter: result.adapter, count: Array.isArray(result.normalized) ? result.normalized.length : undefined }
+    });
+    res.json(result);
+}));
+app.get("/notifications/unread-conversations", asyncRoute(async (req, res) => {
+    const platform = requirePlatform(req.query.platform);
+    const result = await listUnreadConversations({
+        platform,
+        limit: optionalNumber(req.query.limit, 50)
+    });
+    await store.appendAudit({
+        action: "notifications.unread_conversations",
+        tenant_id: tenantId(req),
+        platform,
+        status: "read",
+        metadata: { source: result.source, adapter: result.adapter, count: Array.isArray(result.normalized) ? result.normalized.length : undefined }
+    });
+    res.json(result);
+}));
+app.get("/notifications/message-read-status", asyncRoute(async (req, res) => {
+    const platform = requirePlatform(req.query.platform);
+    const result = await queryMessageReadStatus({
+        platform,
+        conversation_id: requireString(req.query.conversation_id, "conversation_id"),
+        message_id: requireString(req.query.message_id, "message_id")
+    });
+    await store.appendAudit({
+        action: "notifications.message_read_status",
+        tenant_id: tenantId(req),
+        platform,
+        conversation_id: optionalString(req.query.conversation_id),
+        status: "read",
+        metadata: { message_id: req.query.message_id, adapter: result.adapter }
+    });
+    res.json(result);
 }));
 app.post("/messages/send", asyncRoute(async (req, res) => {
     const body = req.body;
@@ -549,6 +690,7 @@ app.post("/approvals/dingtalk/:instance_id/approve", asyncRoute(async (req, res)
 app.get("/integrations/status", asyncRoute(async (_req, res) => {
     const conversations = await store.listConversations({});
     const cli = await checkCliStatus();
+    const workspace = await checkWorkspaceStatus();
     res.json({
         ok: true,
         platforms: {
@@ -568,10 +710,12 @@ app.get("/integrations/status", asyncRoute(async (_req, res) => {
             data_dir: dataDir,
             store_mode: store.mode,
             dry_run_send: dryRunSend,
+            dry_run_workspace: dryRunWorkspace,
             enforce_authorization: enforceAuthorization,
             conversations: conversations.length,
             audit_events: await store.auditCount()
-        }
+        },
+        workspace
     });
 }));
 app.use((error, _req, res, _next) => {
@@ -1169,5 +1313,26 @@ function requirePlatform(value) {
         throw new Error("platform must be feishu or dingtalk");
     }
     return platform;
+}
+function requireWorkspaceProvider(value) {
+    if (value === "feishu" || value === "dingtalk" || value === "tencent") {
+        return value;
+    }
+    throw new Error("provider must be feishu, dingtalk, or tencent");
+}
+function requireWorkspaceKind(value) {
+    if (value === "doc" ||
+        value === "sheet" ||
+        value === "base" ||
+        value === "whiteboard" ||
+        value === "slide" ||
+        value === "smartcanvas" ||
+        value === "smartsheet" ||
+        value === "board" ||
+        value === "mind" ||
+        value === "flowchart") {
+        return value;
+    }
+    throw new Error("kind must be doc, sheet, base, whiteboard, slide, smartcanvas, smartsheet, board, mind, or flowchart");
 }
 //# sourceMappingURL=server.js.map

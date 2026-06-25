@@ -5,11 +5,23 @@
 - The MCP server should only call the connector API and should not hold Feishu or DingTalk credentials.
 - Default to authorized conversations only. Production deployments must enforce user, tenant, bot, and conversation authorization.
 - Require user confirmation before sending. Show the platform, destination, and exact text.
+- Require user confirmation before writing or overwriting external workspace resources. Show the provider, resource type, target, mode, and content/data summary.
 - Require user confirmation before approving DingTalk OA items. Show the title or instance id, task id, and exact remark.
 - Audit read and write actions: actor, platform, destination, action type, timestamp, and result.
 - Redact message payloads in operational logs unless explicitly needed for debugging in a secure environment.
 - Deduplicate webhook events by `platform + message_id` to avoid repeated storage or repeated actions.
 - Store only work identity handles needed for routing when using identity mappings. Do not store private phone numbers, tokens, cookies, or unrelated personal data as aliases.
+- Keep Tencent Docs OAuth/OpenAPI credentials and MCP tokens in connector-service environment or secret storage only.
+
+## Workspace Write Safety
+
+Workspace writes default to dry-run via `CN_WORKSPACE_DRY_RUN`. Production deployments must:
+
+- Keep dry-run enabled during onboarding and test against non-sensitive documents first.
+- Require explicit confirmation for doc/sheet/base/whiteboard writes.
+- Avoid overwriting existing resources unless the user explicitly confirms overwrite mode.
+- Log target ids, resource kinds, action type, and content length, not full secrets or tokens.
+- Treat broad-access docs, finance sheets, customer-facing docs, and base schema changes as high-impact.
 
 ## Schedule Safety
 

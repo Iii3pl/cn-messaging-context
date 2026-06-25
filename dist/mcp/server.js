@@ -4,6 +4,8 @@ import { z } from "zod";
 import { appendQuery, jsonText } from "../shared/http.js";
 const connectorUrl = process.env.CN_MESSAGING_CONNECTOR_URL ?? "http://127.0.0.1:8787";
 const platformSchema = z.enum(["feishu", "dingtalk"]);
+const workspaceProviderSchema = z.enum(["feishu", "dingtalk", "tencent"]);
+const workspaceKindSchema = z.enum(["doc", "sheet", "base", "whiteboard", "slide", "smartcanvas", "smartsheet", "board", "mind", "flowchart"]);
 const timestampSchema = z.string().min(1);
 async function connectorRequest(path, init) {
     const response = await fetch(new URL(path, connectorUrl), {
@@ -32,7 +34,7 @@ function textResult(value) {
 }
 const server = new McpServer({
     name: "cn-messaging-context",
-    version: "0.5.0"
+    version: "0.6.0"
 });
 server.registerTool("list_conversations", {
     title: "List conversations",
@@ -187,6 +189,88 @@ server.registerTool("create_summary_doc", {
     method: "POST",
     body: JSON.stringify(args)
 })));
+const workspaceReadSchema = {
+    provider: workspaceProviderSchema,
+    kind: workspaceKindSchema,
+    target: z.string().optional(),
+    table_id: z.string().optional(),
+    sheet_id: z.string().optional(),
+    range: z.string().optional(),
+    query: z.string().optional(),
+    limit: z.number().int().min(1).max(500).default(100),
+    output_as: z.enum(["markdown", "xml", "csv", "json", "raw", "code", "image"]).optional(),
+    tencent_api_path: z.string().optional()
+};
+const workspaceWriteSchema = {
+    ...workspaceReadSchema,
+    title: z.string().optional(),
+    content: z.string().optional(),
+    mode: z.enum(["create", "append", "overwrite", "update", "insert"]).default("append"),
+    parent_id: z.string().optional(),
+    workspace_id: z.string().optional(),
+    values: z.array(z.array(z.unknown())).optional(),
+    fields: z.array(z.string()).optional(),
+    rows: z.array(z.array(z.unknown())).optional(),
+    records: z.array(z.unknown()).optional(),
+    input_format: z.enum(["markdown", "xml", "csv", "json", "raw", "mermaid", "plantuml"]).optional(),
+    confirmed_by_user: z.boolean(),
+    confirmation_summary: z.string().min(10)
+};
+server.registerTool("check_workspace_status", {
+    title: "Check workspace document status",
+    description: "Check Feishu, DingTalk, and Tencent Docs document/sheet/base/whiteboard adapter availability.",
+    inputSchema: {}
+}, async () => textResult(await connectorRequest("/workspace/status")));
+server.registerTool("read_workspace_resource", {
+    title: "Read workspace resource",
+    description: "Read Feishu, DingTalk, or Tencent Docs documents, sheets, bases/smartsheets, whiteboards, boards, slides, mind maps, or flowcharts through the connector adapters.",
+    inputSchema: workspaceReadSchema
+}, async (args) => textResult(await connectorRequest("/workspace/read", {
+    method: "POST",
+    body: JSON.stringify(args)
+})));
+server.registerTool("write_workspace_resource", {
+    title: "Write workspace resource",
+    description: "Create or update Feishu, DingTalk, or Tencent Docs documents, sheets, bases/smartsheets, whiteboards, boards, slides, mind maps, or flowcharts after user confirmation.",
+    inputSchema: workspaceWriteSchema
+}, async (args) => {
+    if (!args.confirmed_by_user) {
+        throw new Error("write_workspace_resource requires confirmed_by_user=true after user confirmation.");
+    }
+    return textResult(await connectorRequest("/workspace/write", {
+        method: "POST",
+        body: JSON.stringify(args)
+    }));
+});
+server.registerTool("publish_summary_doc", {
+    title: "Publish summary document",
+    description: "Generate a messaging summary document and publish it to Feishu, DingTalk, or Tencent Docs after user confirmation.",
+    inputSchema: {
+        ...workflowSchema,
+        provider: workspaceProviderSchema,
+        kind: workspaceKindSchema.default("doc"),
+        target: z.string().optional(),
+        table_id: z.string().optional(),
+        sheet_id: z.string().optional(),
+        range: z.string().optional(),
+        title: z.string().optional(),
+        current_user: z.string().optional(),
+        mode: z.enum(["create", "append", "overwrite", "update", "insert"]).default("create"),
+        parent_id: z.string().optional(),
+        workspace_id: z.string().optional(),
+        tencent_api_path: z.string().optional(),
+        confirmed_by_user: z.boolean(),
+        confirmation_summary: z.string().min(10)
+    }
+}, async (args) => {
+    if (!args.confirmed_by_user) {
+        throw new Error("publish_summary_doc requires confirmed_by_user=true after user confirmation.");
+    }
+    return textResult(await connectorRequest("/workflows/summary-doc/publish", {
+        method: "POST",
+        body: JSON.stringify(args)
+    }));
+});
 server.registerTool("map_conversation_topics", {
     title: "Map conversation topics",
     description: "Build a Slack-thread-like topic map from synced Feishu or DingTalk messages.",
@@ -211,6 +295,34 @@ server.registerTool("read_topic_thread", {
     method: "POST",
     body: JSON.stringify(args)
 })));
+server.registerTool("list_real_mentions", {
+    title: "List real mentions",
+    description: "Read platform-native messages that mention the current user from Feishu/Lark or DingTalk.",
+    inputSchema: {
+        platform: platformSchema,
+        conversation_id: z.string().optional(),
+        since: timestampSchema.optional(),
+        until: timestampSchema.optional(),
+        limit: z.number().int().min(1).max(200).default(50)
+    }
+}, async (args) => textResult(await connectorRequest(appendQuery("/notifications/mentions", args))));
+server.registerTool("list_unread_conversations", {
+    title: "List unread conversations",
+    description: "Read platform-native unread conversation/feed state from Feishu/Lark or DingTalk where available.",
+    inputSchema: {
+        platform: platformSchema,
+        limit: z.number().int().min(1).max(200).default(50)
+    }
+}, async (args) => textResult(await connectorRequest(appendQuery("/notifications/unread-conversations", args))));
+server.registerTool("query_message_read_status", {
+    title: "Query message read status",
+    description: "Query platform-native message read status when the platform adapter supports it.",
+    inputSchema: {
+        platform: platformSchema,
+        conversation_id: z.string(),
+        message_id: z.string()
+    }
+}, async (args) => textResult(await connectorRequest(appendQuery("/notifications/message-read-status", args))));
 server.registerTool("schedule_daily_digest", {
     title: "Schedule daily digest",
     description: "Create a pending schedule record for a future daily digest. This does not run in the background by itself.",

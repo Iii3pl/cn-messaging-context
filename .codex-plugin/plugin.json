@@ -1,7 +1,7 @@
 {
   "name": "cn-messaging-context",
-  "version": "0.5.0+codex.20260625100419",
-  "description": "Read, summarize, triage, draft, schedule, thread-map, identity-map, and safely act on Feishu/Lark and DingTalk messages plus DingTalk OA approvals.",
+  "version": "0.6.0",
+  "description": "Read, summarize, triage, publish, and safely act on Feishu/Lark, DingTalk, and Tencent Docs workspace context plus DingTalk OA approvals.",
   "author": {
     "name": "Wuliang"
   },
@@ -22,7 +22,7 @@
   "interface": {
     "displayName": "Feishu / DingTalk Context",
     "shortDescription": "Search Chinese team chat context and handle safe DingTalk approvals.",
-    "longDescription": "Use Feishu/Lark and DingTalk conversations from a separate connector service to sync history, search messages, summarize recent context, generate Slack-style daily digests, triage notifications, identify reply candidates, draft reply queues, create summary documents, read native or topic-inferred threads, map cross-platform identities, run safe schedule workers, send user-confirmed messages, and read or approve DingTalk OA items after explicit confirmation.",
+    "longDescription": "Use Feishu/Lark, DingTalk, and Tencent Docs resources from a separate connector service to sync history, search messages, summarize recent context, generate Slack-style daily digests, publish summaries to docs/sheets/bases/whiteboards, read native mention/unread state, identify reply candidates, draft reply queues, read native or topic-inferred threads, map cross-platform identities, run safe schedule workers, send user-confirmed messages, and read or approve DingTalk OA items after explicit confirmation.",
     "developerName": "Wuliang",
     "category": "Communication",
     "capabilities": [
@@ -43,7 +43,13 @@
       "读取这条消息所在的原生 thread",
       "检查并预览已经到时间的定时 digest 和消息",
       "每天 18:00 生成钉钉群聊 digest，先不要发送",
-      "看看钉钉 OA 有哪些待审批，先不要通过"
+      "看看钉钉 OA 有哪些待审批，先不要通过",
+      "把今天的群聊摘要发布到飞书文档，先确认再写入",
+      "把这份摘要追加到钉钉在线表格",
+      "读取腾讯文档里的在线表格数据并总结",
+      "更新飞书白板，画出消息连接器架构",
+      "列出今天真正 @ 我的飞书和钉钉消息",
+      "看看钉钉有哪些未读会话"
     ],
     "brandColor": "#2563EB"
   }

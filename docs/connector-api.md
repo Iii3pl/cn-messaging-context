@@ -164,6 +164,24 @@ Creates draft-only replies for reply candidates. This does not send messages.
 
 Returns a Markdown document combining digest, triage, and reply candidates. This is the Feishu/DingTalk equivalent of a Slack Canvas-style recap, but it is returned as Markdown unless another publishing adapter is added.
 
+### `POST /workflows/summary-doc/publish`
+
+Generates the same Markdown summary document and publishes it through the workspace adapter after explicit confirmation.
+
+```json
+{
+  "provider": "feishu",
+  "kind": "doc",
+  "mode": "create",
+  "title": "今日群聊摘要",
+  "platform": "dingtalk",
+  "since": "2026-06-25T00:00:00+08:00",
+  "until": "2026-06-25T18:00:00+08:00",
+  "confirmed_by_user": true,
+  "confirmation_summary": "User confirmed provider, title, and destination."
+}
+```
+
 ### `POST /workflows/topic-map`
 
 Builds a topic map from normalized messages. This is the Feishu/DingTalk equivalent of looking across Slack threads, but it is inferred from message text unless a platform-specific thread id exists.
@@ -218,6 +236,104 @@ Query parameters:
 
 - `value`: alias, display name, platform user id, or canonical user
 - `platform`: optional platform filter
+
+## Workspace Resource APIs
+
+Workspace writes default to dry-run unless `CN_WORKSPACE_DRY_RUN=false` is set in the connector environment.
+
+### `GET /workspace/status`
+
+Returns availability for:
+
+- Feishu/Lark docs, sheets, Base/smartsheet, whiteboard via `lark-cli`
+- DingTalk docs, online sheets, AI tables via `dws`
+- Tencent Docs OpenAPI/MCP bridge configuration via connector environment variables
+
+### `POST /workspace/read`
+
+Body:
+
+```json
+{
+  "provider": "feishu",
+  "kind": "sheet",
+  "target": "spreadsheet_token_or_url",
+  "sheet_id": "Sheet1",
+  "range": "A1:D20"
+}
+```
+
+Supported `provider`: `feishu`, `dingtalk`, `tencent`.
+
+Supported `kind`: `doc`, `sheet`, `base`, `whiteboard`, `slide`, `smartcanvas`, `smartsheet`, `board`, `mind`, `flowchart`.
+
+Tencent Docs calls require connector-side OAuth/OpenAPI credentials. If a deployment needs a tenant-specific Tencent endpoint, pass `tencent_api_path` or configure `TENCENT_DOCS_API_BASE`.
+
+### `POST /workspace/write`
+
+Requires `confirmed_by_user: true`.
+
+Examples:
+
+```json
+{
+  "provider": "dingtalk",
+  "kind": "sheet",
+  "target": "NODE_ID",
+  "sheet_id": "Sheet1",
+  "range": "A1",
+  "mode": "update",
+  "values": [["项目", "状态"], ["采购平台", "进行中"]],
+  "confirmed_by_user": true,
+  "confirmation_summary": "User confirmed sheet target, range, and exact values."
+}
+```
+
+```json
+{
+  "provider": "feishu",
+  "kind": "whiteboard",
+  "target": "whiteboard_token",
+  "mode": "overwrite",
+  "input_format": "mermaid",
+  "content": "flowchart LR\\nA[消息] --> B[摘要]",
+  "confirmed_by_user": true,
+  "confirmation_summary": "User confirmed whiteboard target and Mermaid content."
+}
+```
+
+## Native Notification APIs
+
+### `GET /notifications/mentions`
+
+Query parameters:
+
+- `platform`: `feishu` or `dingtalk`
+- `conversation_id`: optional
+- `since`
+- `until`
+- `limit`
+
+Uses `lark-cli im +messages-search --is-at-me` for Feishu/Lark and `dws chat message list-mentions` for DingTalk.
+
+### `GET /notifications/unread-conversations`
+
+Query parameters:
+
+- `platform`: `feishu` or `dingtalk`
+- `limit`
+
+Uses DingTalk's unread-conversation command when available. Feishu/Lark uses the current user's feed/shortcut surfaces and returns raw adapter evidence when unread fields are present.
+
+### `GET /notifications/message-read-status`
+
+Query parameters:
+
+- `platform`
+- `conversation_id`
+- `message_id`
+
+Uses DingTalk `query-read-status` when available. Feishu/Lark currently returns message evidence from `messages-mget`; do not treat it as full read-receipt coverage unless the tenant adapter exposes that field.
 
 ## Schedule APIs
 
