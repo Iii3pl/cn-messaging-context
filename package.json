@@ -1,6 +1,6 @@
 {
   "name": "cn-messaging-context",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "private": true,
   "type": "module",
   "description": "Codex plugin, MCP server, and connector service for Feishu, Lark, DingTalk, Tencent Docs workspace publishing, native notification state, messages, approvals, and Slack-style workflows.",

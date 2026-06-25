@@ -17,6 +17,8 @@ CN_MESSAGING_DATA_DIR=.data \
 npm run start:connector
 ```
 
+In plain language: this starts the small local helper service that Codex talks to when it wants to use plugin tools. The browser address is `http://127.0.0.1:8787`, but users do not need to remember that address; it just means "the helper service running on this computer."
+
 3. Install the plugin into Codex from the plugin source directory.
 
 4. Open a new Codex session so skills and MCP tools are reloaded.
@@ -47,7 +49,8 @@ npm run start:connector
 | `CN_MESSAGING_CONNECTOR_URL` | `http://127.0.0.1:8787` | MCP server to connector URL |
 | `CN_MESSAGING_DATA_DIR` | `.data` | Connector storage directory |
 | `CN_MESSAGING_STORE` | `jsonl` | Use `jsonl` or `sqlite` |
-| `CN_MESSAGING_DRY_RUN` | `true` | Set to `false` for real sends and approvals |
+| `CN_MESSAGING_DRY_RUN` | `true` | Friendly meaning: preview first, do not really send or approve yet |
+| `CN_WORKSPACE_DRY_RUN` | `true` | Friendly meaning: preview first, do not really write documents or sheets yet |
 | `CN_MESSAGING_ENFORCE_AUTH` | `false` | Set to `true` to require conversation authorization records |
 | `FEISHU_WEBHOOK_SECRET` | unset | Feishu webhook signature secret |
 | `DINGTALK_WEBHOOK_SECRET` | unset | DingTalk webhook signature secret |
@@ -64,4 +67,11 @@ npm run start:connector
 - `schedule_daily_digest`, `schedule_message`, `list_scheduled_actions`, and `cancel_scheduled_action` create and manage schedule records without background execution.
 - `list_pending_dingtalk_approvals` returns visible OA items.
 - `approve_dingtalk_approval` rejects calls without user confirmation.
-- With dry-run enabled, sends and approvals write audit records but do not call platform write APIs.
+- With preview-first mode enabled, sends, approvals, and workspace writes record what would happen but do not actually change Feishu, DingTalk, or Tencent Docs.
+
+## Human-Friendly Status Phrases
+
+- Say "插件的小服务没开" instead of "127.0.0.1:8787 failed".
+- Say "默认先预览，不会真的发送/审批/写文档" instead of "dry-run".
+- Say "写入前会先问你" instead of "confirmation gate".
+- Say "钉钉详情接口有一部分字段读不出来" instead of raw platform parser errors.

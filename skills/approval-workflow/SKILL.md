@@ -19,6 +19,25 @@ Use this skill when the user asks about DingTalk OA approvals, pending approvals
    - whether the current account can act
 4. If the records or workflow state disagree with the pending list, report the disagreement and do not approve.
 
+## How To Explain It To People
+
+Use plain workplace language in the final answer. Avoid exposing internal words such as `RUNNING`, `taskId`, `instance_id`, `PARAM_ERROR`, `saNode`, `127.0.0.1`, or `dry-run` unless the user explicitly asks for debugging detail.
+
+Prefer this shape:
+
+```md
+今天还有 <N> 个钉钉审批需要你看。
+
+1. <审批标题>
+   - 谁提交的：<人名，如果能看出>
+   - 现在到哪一步：<还在审批中 / 已有几个人同意 / 等你处理>
+   - 我能确认的证据：<待审批列表里还在；审批流水显示...>
+
+说明：插件的小服务刚才没开，所以我直接查了钉钉。结果是实时查到的；只是钉钉详情接口有一部分字段返回不规整，不影响这条是否在待审批列表里的判断。
+```
+
+When connector service status matters, say "插件的小服务没开" instead of "127.0.0.1:8787 failed". When a detail endpoint fails but list/tasks/records work, say "详情页有一部分字段读不出来，但待审批名单和审批流水能确认" instead of showing raw error strings.
+
 ## Approval Safety
 
 Before approving, Codex must show:

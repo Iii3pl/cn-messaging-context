@@ -1,6 +1,6 @@
 {
   "name": "cn-messaging-context",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Read, summarize, triage, publish, and safely act on Feishu/Lark, DingTalk, and Tencent Docs workspace context plus DingTalk OA approvals.",
   "author": {
     "name": "Wuliang"
