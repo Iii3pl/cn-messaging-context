@@ -68,6 +68,7 @@ app.get("/messages/search", asyncRoute(async (req, res) => {
         conversation_id: optionalString(req.query.conversation_id),
         query: optionalString(req.query.query),
         sender: optionalString(req.query.sender),
+        thread_id: optionalString(req.query.thread_id),
         since: optionalString(req.query.since),
         until: optionalString(req.query.until),
         limit: optionalNumber(req.query.limit, 50)
@@ -85,6 +86,28 @@ app.get("/messages/recent", asyncRoute(async (req, res) => {
         limit: optionalNumber(req.query.limit, 50)
     });
     res.json({ messages });
+}));
+app.get("/messages/thread", asyncRoute(async (req, res) => {
+    const platform = requirePlatform(req.query.platform);
+    const conversationId = optionalString(req.query.conversation_id);
+    const threadId = optionalString(req.query.thread_id);
+    const messageId = optionalString(req.query.message_id);
+    if (!threadId && !messageId) {
+        res.status(400).json({ error: "thread_id or message_id is required" });
+        return;
+    }
+    if (conversationId) {
+        await requireAuthorized(req, platform, conversationId);
+    }
+    const messages = await readNativeThread({
+        tenant_id: tenantId(req),
+        platform,
+        conversation_id: conversationId,
+        thread_id: threadId,
+        message_id: messageId,
+        limit: optionalNumber(req.query.limit, 100)
+    });
+    res.json(messages);
 }));
 app.post("/messages/summarize", asyncRoute(async (req, res) => {
     const body = req.body;
@@ -162,33 +185,36 @@ app.post("/workflows/daily-digest", asyncRoute(async (req, res) => {
 app.post("/workflows/notification-triage", asyncRoute(async (req, res) => {
     const body = req.body;
     const messages = await getWorkflowMessages(req, body);
-    const triage = buildNotificationTriage(messages, body.current_user, Boolean(body.include_can_ignore));
+    const currentUserTerms = await resolveUserTerms(req, body.current_user);
+    const triage = buildNotificationTriage(messages, currentUserTerms, Boolean(body.include_can_ignore));
     await store.appendAudit({
         action: "workflows.notification_triage",
         tenant_id: tenantId(req),
         platform: body.platform,
         status: "read",
-        metadata: { message_count: messages.length, current_user: body.current_user, since: body.since, until: body.until }
+        metadata: { message_count: messages.length, current_user: body.current_user, current_user_terms: currentUserTerms, since: body.since, until: body.until }
     });
     res.json({ message_count: messages.length, ...triage });
 }));
 app.post("/workflows/reply-candidates", asyncRoute(async (req, res) => {
     const body = req.body;
     const messages = await getWorkflowMessages(req, body);
-    const candidates = findReplyCandidates(messages, body.current_user).slice(0, body.limit ?? 20);
+    const currentUserTerms = await resolveUserTerms(req, body.current_user);
+    const candidates = findReplyCandidates(messages, currentUserTerms).slice(0, body.limit ?? 20);
     await store.appendAudit({
         action: "workflows.reply_candidates",
         tenant_id: tenantId(req),
         platform: body.platform,
         status: "read",
-        metadata: { message_count: messages.length, candidates: candidates.length, current_user: body.current_user }
+        metadata: { message_count: messages.length, candidates: candidates.length, current_user: body.current_user, current_user_terms: currentUserTerms }
     });
     res.json({ message_count: messages.length, candidates });
 }));
 app.post("/workflows/draft-reply-queue", asyncRoute(async (req, res) => {
     const body = req.body;
     const messages = await getWorkflowMessages(req, body);
-    const candidates = findReplyCandidates(messages, body.current_user).slice(0, body.limit ?? 10);
+    const currentUserTerms = await resolveUserTerms(req, body.current_user);
+    const candidates = findReplyCandidates(messages, currentUserTerms).slice(0, body.limit ?? 10);
     const drafts = candidates.map((candidate) => ({
         candidate,
         draft: draftCandidateReply(candidate, body.tone)
@@ -203,8 +229,9 @@ app.post("/workflows/summary-doc", asyncRoute(async (req, res) => {
     const body = req.body;
     const messages = await getWorkflowMessages(req, body);
     const digest = buildDailyDigest(messages, body);
-    const triage = buildNotificationTriage(messages, body.current_user, false);
-    const candidates = findReplyCandidates(messages, body.current_user).slice(0, 10);
+    const currentUserTerms = await resolveUserTerms(req, body.current_user);
+    const triage = buildNotificationTriage(messages, currentUserTerms, false);
+    const candidates = findReplyCandidates(messages, currentUserTerms).slice(0, 10);
     const document = buildSummaryDocument({
         title: body.title,
         messages,
@@ -315,6 +342,24 @@ app.post("/schedules/:id/cancel", asyncRoute(async (req, res) => {
     });
     res.json({ cancelled: true, schedule });
 }));
+app.post("/schedules/run-due", asyncRoute(async (req, res) => {
+    const body = req.body;
+    if (!store.listScheduledActions) {
+        res.status(501).json({ error: "scheduled_store_unavailable" });
+        return;
+    }
+    const now = body.now ?? new Date().toISOString();
+    const due = (await store.listScheduledActions({
+        tenant_id: tenantId(req),
+        status: "pending",
+        limit: optionalNumber(body.limit, 50)
+    })).filter((schedule) => Date.parse(schedule.scheduled_for) <= Date.parse(now));
+    const results = [];
+    for (const schedule of due) {
+        results.push(await runScheduledAction(req, schedule, Boolean(body.execute)));
+    }
+    res.json({ now, execute: Boolean(body.execute), due_count: due.length, results });
+}));
 app.post("/messages/send", asyncRoute(async (req, res) => {
     const body = req.body;
     const platform = requirePlatform(body.platform);
@@ -398,6 +443,57 @@ app.post("/authorizations/conversations", asyncRoute(async (req, res) => {
         conversation_name: body.conversation_name
     });
     res.json({ authorized: true, platform, conversation_id: conversationId });
+}));
+app.post("/identities", asyncRoute(async (req, res) => {
+    if (!store.upsertIdentityMapping) {
+        res.status(501).json({ error: "identity_store_unavailable" });
+        return;
+    }
+    const body = req.body;
+    const mapping = await store.upsertIdentityMapping({
+        tenant_id: tenantId(req),
+        canonical_user: requireString(body.canonical_user, "canonical_user"),
+        display_name: body.display_name,
+        platform: requirePlatform(body.platform),
+        platform_user_id: body.platform_user_id,
+        platform_user_name: body.platform_user_name,
+        aliases: body.aliases ?? []
+    });
+    await store.appendAudit({
+        action: "identities.upsert",
+        tenant_id: tenantId(req),
+        platform: mapping.platform,
+        status: "updated",
+        metadata: { canonical_user: mapping.canonical_user, platform_user_id: mapping.platform_user_id }
+    });
+    res.json({ mapping });
+}));
+app.get("/identities", asyncRoute(async (req, res) => {
+    if (!store.listIdentityMappings) {
+        res.json({ mappings: [], mode: "identity_store_unavailable" });
+        return;
+    }
+    const mappings = await store.listIdentityMappings({
+        tenant_id: tenantId(req),
+        platform: optionalPlatform(req.query.platform),
+        canonical_user: optionalString(req.query.canonical_user),
+        query: optionalString(req.query.query),
+        limit: optionalNumber(req.query.limit, 50)
+    });
+    res.json({ mappings });
+}));
+app.get("/identities/resolve", asyncRoute(async (req, res) => {
+    if (!store.resolveIdentity) {
+        res.json({ mappings: [], mode: "identity_store_unavailable" });
+        return;
+    }
+    const value = requireString(req.query.value, "value");
+    const mappings = await store.resolveIdentity({
+        tenant_id: tenantId(req),
+        platform: optionalPlatform(req.query.platform),
+        value
+    });
+    res.json({ value, mappings });
 }));
 app.get("/approvals/dingtalk/pending", asyncRoute(async (req, res) => {
     const limit = optionalNumber(req.query.limit, 20);
@@ -605,9 +701,9 @@ function buildDailyDigest(messages, request) {
         "- 摘要基于连接器当前已入库消息；未同步的群聊或历史窗口不会出现在结果中。"
     ].join("\n").trim();
 }
-function buildNotificationTriage(messages, currentUser, includeCanIgnore) {
+function buildNotificationTriage(messages, currentUserTerms, includeCanIgnore) {
     const tasks = findAttentionItems(messages)
-        .filter((message) => !currentUser || message.sender !== currentUser)
+        .filter((message) => !isCurrentUserSender(message, currentUserTerms))
         .slice(0, 12);
     const skim = messages
         .filter((message) => !tasks.includes(message))
@@ -635,14 +731,14 @@ function buildNotificationTriage(messages, currentUser, includeCanIgnore) {
     ].join("\n");
     return { triage, tasks_for_you: tasks, worth_skimming: skim, can_ignore_for_now: ignore };
 }
-function findReplyCandidates(messages, currentUser) {
+function findReplyCandidates(messages, currentUserTerms) {
     const sorted = [...messages].sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp));
     const candidates = [];
     for (const message of sorted) {
-        if (currentUser && message.sender === currentUser) {
+        if (isCurrentUserSender(message, currentUserTerms)) {
             continue;
         }
-        const reason = replyReason(message, currentUser);
+        const reason = replyReason(message, currentUserTerms);
         if (!reason) {
             continue;
         }
@@ -758,6 +854,149 @@ async function appendScheduled(req, input) {
     });
     return schedule;
 }
+async function readNativeThread(input) {
+    if (input.thread_id) {
+        const messages = await store.searchMessages({
+            tenant_id: input.tenant_id,
+            platform: input.platform,
+            conversation_id: input.conversation_id,
+            thread_id: input.thread_id,
+            limit: input.limit
+        });
+        return {
+            platform: input.platform,
+            conversation_id: input.conversation_id,
+            thread_id: input.thread_id,
+            message_count: messages.length,
+            mode: messages.length > 0 ? "native_thread" : "not_found",
+            messages: messages.sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp))
+        };
+    }
+    const scan = await store.searchMessages({
+        tenant_id: input.tenant_id,
+        platform: input.platform,
+        conversation_id: input.conversation_id,
+        limit: Math.max(input.limit, 500)
+    });
+    const anchor = scan.find((message) => message.message_id === input.message_id);
+    if (!anchor) {
+        return {
+            platform: input.platform,
+            conversation_id: input.conversation_id,
+            thread_id: input.message_id ?? "unknown",
+            message_count: 0,
+            mode: "not_found",
+            messages: []
+        };
+    }
+    const threadId = anchor.thread_id ?? anchor.parent_message_id ?? anchor.message_id;
+    const messages = scan.filter((message) => message.message_id === threadId ||
+        message.message_id === anchor.message_id ||
+        message.thread_id === threadId ||
+        message.parent_message_id === threadId).slice(0, input.limit);
+    return {
+        platform: input.platform,
+        conversation_id: input.conversation_id ?? anchor.conversation_id,
+        thread_id: threadId,
+        message_count: messages.length,
+        mode: anchor.thread_id || anchor.parent_message_id ? "native_thread" : "anchor_inferred",
+        messages: messages.sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp))
+    };
+}
+async function runScheduledAction(req, schedule, execute) {
+    const base = {
+        id: schedule.id,
+        action: schedule.action,
+        platform: schedule.platform,
+        conversation_id: schedule.conversation_id,
+        scheduled_for: schedule.scheduled_for
+    };
+    try {
+        if (schedule.action === "daily_digest") {
+            const payload = schedule.payload;
+            const messages = execute ? await getWorkflowMessages(req, payload) : [];
+            const digest = execute ? buildDailyDigest(messages, payload) : undefined;
+            if (execute) {
+                await store.updateScheduledActionStatus?.({
+                    tenant_id: tenantId(req),
+                    id: schedule.id,
+                    status: "completed",
+                    result_summary: `daily_digest generated with ${messages.length} messages`
+                });
+                await store.appendAudit({
+                    action: "schedules.daily_digest.run",
+                    tenant_id: tenantId(req),
+                    platform: schedule.platform,
+                    status: "completed",
+                    metadata: { schedule_id: schedule.id, message_count: messages.length }
+                });
+            }
+            return {
+                ...base,
+                status: execute ? "completed" : "preview_due",
+                message_count: messages.length,
+                digest
+            };
+        }
+        const text = requireString(schedule.payload.text, "payload.text");
+        const platform = requirePlatform(schedule.platform);
+        const conversationId = requireString(schedule.conversation_id, "conversation_id");
+        if (!execute) {
+            return { ...base, status: "preview_due", text_length: text.length };
+        }
+        const audit = await store.appendAudit({
+            action: "schedules.send_message.run",
+            tenant_id: tenantId(req),
+            platform,
+            conversation_id: conversationId,
+            status: dryRunSend ? "dry_run" : "submitted",
+            metadata: { schedule_id: schedule.id, text_length: text.length }
+        });
+        const sendResult = dryRunSend
+            ? { sent: false, dry_run: true, adapter: "schedule-worker" }
+            : await sendMessageViaCli({ platform, conversation_id: conversationId, text, dry_run: false });
+        await store.updateScheduledActionStatus?.({
+            tenant_id: tenantId(req),
+            id: schedule.id,
+            status: "completed",
+            result_summary: dryRunSend ? "message dry-run recorded" : "message submitted"
+        });
+        return { ...base, status: "completed", dry_run: dryRunSend, audit_id: audit.id, send_result: sendResult };
+    }
+    catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (execute) {
+            await store.updateScheduledActionStatus?.({
+                tenant_id: tenantId(req),
+                id: schedule.id,
+                status: "failed",
+                result_summary: message
+            });
+            await store.appendAudit({
+                action: `schedules.${schedule.action}.run`,
+                tenant_id: tenantId(req),
+                platform: schedule.platform,
+                conversation_id: schedule.conversation_id,
+                status: "failed",
+                metadata: { schedule_id: schedule.id, error: message }
+            });
+        }
+        return { ...base, status: "failed", error: message };
+    }
+}
+async function resolveUserTerms(req, currentUser) {
+    if (!currentUser) {
+        return [];
+    }
+    const terms = [currentUser];
+    if (store.resolveIdentity) {
+        const mappings = await store.resolveIdentity({ tenant_id: tenantId(req), value: currentUser });
+        for (const mapping of mappings) {
+            terms.push(mapping.canonical_user, mapping.display_name ?? "", mapping.platform_user_id ?? "", mapping.platform_user_name ?? "", ...mapping.aliases);
+        }
+    }
+    return uniqueStrings(terms);
+}
 function uniqueMessages(messages) {
     const seen = new Set();
     const unique = [];
@@ -822,9 +1061,9 @@ function findAttentionItems(messages) {
         return /@|请|麻烦|需要|确认|看看|处理|跟进|回复|审批|通过|截止|今天|明天|风险|问题|卡点|异常/.test(text);
     });
 }
-function replyReason(message, currentUser) {
+function replyReason(message, currentUserTerms) {
     const text = message.text;
-    if (currentUser && (text.includes(`@${currentUser}`) || text.includes(currentUser))) {
+    if (mentionsCurrentUser(message, currentUserTerms)) {
         return "提到当前用户";
     }
     if (/请|麻烦|帮忙|看看|确认|回复|处理|跟进/.test(text)) {
@@ -837,6 +1076,23 @@ function replyReason(message, currentUser) {
         return "高影响事项可能需要确认";
     }
     return undefined;
+}
+function isCurrentUserSender(message, currentUserTerms) {
+    if (currentUserTerms.length === 0) {
+        return false;
+    }
+    return currentUserTerms.some((term) => term === message.sender || term === message.sender_id);
+}
+function mentionsCurrentUser(message, currentUserTerms) {
+    if (currentUserTerms.length === 0) {
+        return false;
+    }
+    return currentUserTerms.some((term) => message.text.includes(`@${term}`) ||
+        message.text.includes(term) ||
+        Boolean(message.mentions?.some((mention) => mention === term)));
+}
+function uniqueStrings(values) {
+    return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
 }
 function summarizeVolume(messages) {
     const conversations = new Set(messages.map((message) => `${message.platform}:${message.conversation_id}`));

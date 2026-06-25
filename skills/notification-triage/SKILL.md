@@ -10,10 +10,11 @@ Use this skill when the user asks what they need to read, reply to, decide, appr
 ## Workflow
 
 1. Use the user's requested time window. For "today", use the user's local day.
-2. Call `triage_today`.
-3. Pass `current_user` when the user name is known or provided.
-4. If the triage identifies reply-worthy messages and the user asks for replies, call `draft_reply_queue`.
-5. If an item is an OA approval, switch to [../approval-workflow/SKILL.md](../approval-workflow/SKILL.md) before any approve action.
+2. If the user's Feishu/Lark and DingTalk identities may differ, call `resolve_identity` or `list_identity_mappings` first.
+3. Call `triage_today`.
+4. Pass `current_user` when the user name is known or provided. The connector will expand mapped aliases when available.
+5. If the triage identifies reply-worthy messages and the user asks for replies, call `draft_reply_queue`.
+6. If an item is an OA approval, switch to [../approval-workflow/SKILL.md](../approval-workflow/SKILL.md) before any approve action.
 
 ## Output Shape
 

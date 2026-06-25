@@ -6,7 +6,7 @@
 - A stdio MCP server exposes bounded tools to Codex.
 - A separate connector service owns webhooks, token refresh, storage, search, and send adapters.
 
-This keeps long-running platform work out of Codex sessions while still letting Codex sync history, search, summarize, generate group-chat reports, create Slack-style daily digests, triage notifications, find reply candidates, draft reply queues, create summary documents, map topic threads, create safe schedule records, safely send confirmed messages, and read or approve confirmed DingTalk OA items.
+This keeps long-running platform work out of Codex sessions while still letting Codex sync history, search, summarize, generate group-chat reports, create Slack-style daily digests, triage notifications, find reply candidates, draft reply queues, create summary documents, read native or topic-inferred threads, map cross-platform identities, run due schedule records, safely send confirmed messages, and read or approve confirmed DingTalk OA items.
 
 ## Structure
 
@@ -39,6 +39,7 @@ Set `CN_MESSAGING_STORE=sqlite` to use the production-style local SQLite store w
 - `list_conversations`
 - `search_messages`
 - `get_recent_context`
+- `read_native_thread`
 - `summarize_conversation`
 - `create_conversation_report`
 - `create_daily_digest`
@@ -52,9 +53,13 @@ Set `CN_MESSAGING_STORE=sqlite` to use the production-style local SQLite store w
 - `schedule_message`
 - `list_scheduled_actions`
 - `cancel_scheduled_action`
+- `run_due_scheduled_actions`
 - `draft_reply`
 - `sync_history`
 - `authorize_conversation`
+- `upsert_identity_mapping`
+- `list_identity_mappings`
+- `resolve_identity`
 - `send_message`
 - `list_pending_dingtalk_approvals`
 - `get_dingtalk_approval_detail`
@@ -73,12 +78,13 @@ The plugin includes Slack-inspired workflows adapted for Feishu/Lark and DingTal
 - Notification triage: tasks for the user, worth-skimming items, and optional low-priority items.
 - Reply drafting: find likely response candidates and prepare draft-only replies.
 - Summary document: Markdown document similar to a Slack Canvas recap.
-- Topic map/thread: group messages into topic-centered timelines with decisions and blockers.
-- Scheduled workflows: create pending records for future digests or confirmed messages.
+- Native/thread map: read platform-native threads when thread/root ids are available, or fall back to topic-centered timelines with decisions and blockers.
+- Identity mapping: connect Feishu/Lark and DingTalk user ids or display names to one canonical person for cross-platform triage.
+- Scheduled workflows: create, preview, execute, list, and cancel records for future digests or confirmed messages.
 
 These workflows operate only on messages already captured or synced into the connector. Use `sync_history` first when live history coverage is required.
 
-Scheduled records are not a background runner by themselves. Production deployments should add a worker that reads pending records, regenerates the digest or message at execution time, and still preserves the send/approval confirmation model.
+`run_due_scheduled_actions` can be called by a cron/worker or manually from Codex. It previews due records by default; execution requires `execute: true`, and message sends still honor the connector dry-run setting plus the original confirmation record.
 
 ## CodeBuddy / WorkBuddy
 

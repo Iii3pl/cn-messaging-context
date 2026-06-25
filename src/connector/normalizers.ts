@@ -27,6 +27,9 @@ export function normalizeFeishuEvent(payload: unknown): MessageRecord {
     event?: {
       message?: {
         message_id?: string;
+        root_id?: string;
+        parent_id?: string;
+        thread_id?: string;
         chat_id?: string;
         chat_type?: string;
         content?: unknown;
@@ -55,6 +58,8 @@ export function normalizeFeishuEvent(payload: unknown): MessageRecord {
     conversation_id: message?.chat_id ?? "unknown-feishu-conversation",
     conversation_name: message?.chat_type,
     message_id: message?.message_id ?? data.header?.event_id ?? fallbackMessageId("feishu", payload),
+    thread_id: message?.thread_id ?? message?.root_id ?? message?.parent_id,
+    parent_message_id: message?.parent_id ?? message?.root_id,
     sender: senderId ?? data.event?.sender?.sender_type ?? "unknown",
     sender_id: senderId,
     text: parseJsonText(message?.content),
@@ -68,6 +73,10 @@ export function normalizeDingTalkEvent(payload: unknown): MessageRecord {
     conversationId?: string;
     conversationTitle?: string;
     msgId?: string;
+    threadId?: string;
+    rootId?: string;
+    parentMsgId?: string;
+    parentMessageId?: string;
     senderNick?: string;
     senderStaffId?: string;
     createAt?: number;
@@ -81,6 +90,8 @@ export function normalizeDingTalkEvent(payload: unknown): MessageRecord {
     conversation_id: data.conversationId ?? "unknown-dingtalk-conversation",
     conversation_name: data.conversationTitle,
     message_id: data.msgId ?? fallbackMessageId("dingtalk", payload),
+    thread_id: data.threadId ?? data.rootId ?? data.parentMsgId ?? data.parentMessageId,
+    parent_message_id: data.parentMsgId ?? data.parentMessageId ?? data.rootId,
     sender: data.senderNick ?? data.senderStaffId ?? "unknown",
     sender_id: data.senderStaffId,
     text: data.text?.content ?? "",

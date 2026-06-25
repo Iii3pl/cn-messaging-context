@@ -16,6 +16,7 @@ Use this as the router for Feishu and DingTalk work. Read the relevant context f
 | Find and draft replies | [../reply-drafting/SKILL.md](../reply-drafting/SKILL.md) |
 | Shareable summary documents | [../summary-doc/SKILL.md](../summary-doc/SKILL.md) |
 | Topic/thread-style reading | [../topic-thread/SKILL.md](../topic-thread/SKILL.md) |
+| Cross-platform user identity mapping | [../identity-mapping/SKILL.md](../identity-mapping/SKILL.md) |
 | Scheduled digests and messages | [../scheduled-workflows/SKILL.md](../scheduled-workflows/SKILL.md) |
 | Drafting or sending messages | [../message-reply/SKILL.md](../message-reply/SKILL.md) |
 | DingTalk OA approvals | [../approval-workflow/SKILL.md](../approval-workflow/SKILL.md) |
@@ -31,8 +32,10 @@ Use this as the router for Feishu and DingTalk work. Read the relevant context f
 - Triage messages into tasks for the user, worth-skimming items, and low-priority items.
 - Find messages likely requiring replies and produce draft-only reply queues.
 - Create Markdown summary documents similar to Slack Canvas summaries.
-- Map messages into topic threads and read topic-centered timelines.
-- Create, list, and cancel safe schedule records for future digests or messages.
+- Read platform-native message threads when thread/root ids are available.
+- Map messages into topic threads and read topic-centered timelines when native threads are unavailable.
+- Map Feishu/Lark and DingTalk user ids or display names to one canonical person for cross-platform triage.
+- Create, preview, execute, list, and cancel safe schedule records for future digests or messages.
 - Draft replies from available context.
 - Send a message only after the user confirms the exact platform, destination, and text.
 - Read DingTalk OA approvals and approve only after exact user confirmation.
@@ -57,8 +60,10 @@ Use this as the router for Feishu and DingTalk work. Read the relevant context f
 - Use `triage_today` when the user asks what needs their attention.
 - Use `find_reply_candidates` and `draft_reply_queue` when the user asks what to reply to or wants prepared replies.
 - Use `create_summary_doc` for shareable Markdown summaries.
-- Use `map_conversation_topics` and `read_topic_thread` for Slack-thread-like topic exploration.
-- Use `schedule_daily_digest`, `schedule_message`, `list_scheduled_actions`, and `cancel_scheduled_action` only through [../scheduled-workflows/SKILL.md](../scheduled-workflows/SKILL.md).
+- Use `read_native_thread` when a user supplies a message id, thread id, root id, or asks for "this message's thread".
+- Use `map_conversation_topics` and `read_topic_thread` for Slack-thread-like topic exploration when no native thread id exists.
+- Use `upsert_identity_mapping`, `list_identity_mappings`, and `resolve_identity` when a user's Feishu/DingTalk names or ids need to be treated as the same person.
+- Use `schedule_daily_digest`, `schedule_message`, `list_scheduled_actions`, `run_due_scheduled_actions`, and `cancel_scheduled_action` only through [../scheduled-workflows/SKILL.md](../scheduled-workflows/SKILL.md).
 - Use `draft_reply` for draft-first tasks.
 - Use `send_message` only through [../message-reply/SKILL.md](../message-reply/SKILL.md).
 - Use DingTalk approval tools only through [../approval-workflow/SKILL.md](../approval-workflow/SKILL.md).

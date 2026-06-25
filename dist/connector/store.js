@@ -7,17 +7,20 @@ export class JsonlStore {
     messagePath;
     auditPath;
     scheduledPath;
+    identityPath;
     constructor(dataDir) {
         this.dataDir = dataDir;
         this.messagePath = path.join(dataDir, "messages.jsonl");
         this.auditPath = path.join(dataDir, "audit.jsonl");
         this.scheduledPath = path.join(dataDir, "scheduled-actions.jsonl");
+        this.identityPath = path.join(dataDir, "identity-mappings.jsonl");
     }
     async ensure() {
         await mkdir(this.dataDir, { recursive: true });
         await this.ensureFile(this.messagePath);
         await this.ensureFile(this.auditPath);
         await this.ensureFile(this.scheduledPath);
+        await this.ensureFile(this.identityPath);
     }
     async appendMessage(record) {
         await this.ensure();
@@ -39,6 +42,7 @@ export class JsonlStore {
             .filter((message) => !filters.tenant_id || message.tenant_id === filters.tenant_id)
             .filter((message) => !filters.platform || message.platform === filters.platform)
             .filter((message) => !filters.conversation_id || message.conversation_id === filters.conversation_id)
+            .filter((message) => !filters.thread_id || message.thread_id === filters.thread_id || message.parent_message_id === filters.thread_id)
             .filter((message) => !query || message.text.toLowerCase().includes(query))
             .filter((message) => !sender || message.sender.toLowerCase().includes(sender) || message.sender_id?.toLowerCase().includes(sender))
             .filter((message) => {
@@ -105,6 +109,68 @@ export class JsonlStore {
         await this.appendJsonl(this.scheduledPath, scheduled);
         return scheduled;
     }
+    async upsertIdentityMapping(record) {
+        await this.ensure();
+        const records = await this.readJsonl(this.identityPath);
+        const now = new Date().toISOString();
+        const tenantId = record.tenant_id ?? "default";
+        const aliases = uniqueStrings([
+            ...record.aliases,
+            record.display_name,
+            record.platform_user_name,
+            record.platform_user_id,
+            record.canonical_user
+        ]);
+        const index = records.findIndex((item) => (item.tenant_id ?? "default") === tenantId &&
+            item.platform === record.platform &&
+            ((record.platform_user_id && item.platform_user_id === record.platform_user_id) ||
+                (record.platform_user_name && item.platform_user_name === record.platform_user_name) ||
+                item.canonical_user === record.canonical_user));
+        const mapping = index >= 0
+            ? {
+                ...records[index],
+                ...record,
+                tenant_id: tenantId,
+                aliases: uniqueStrings([...(records[index].aliases ?? []), ...aliases]),
+                updated_at: now
+            }
+            : {
+                id: crypto.randomUUID(),
+                created_at: now,
+                updated_at: now,
+                ...record,
+                tenant_id: tenantId,
+                aliases
+            };
+        if (index >= 0) {
+            records[index] = mapping;
+        }
+        else {
+            records.push(mapping);
+        }
+        await writeFile(this.identityPath, records.map((item) => JSON.stringify(item)).join("\n") + "\n");
+        return mapping;
+    }
+    async listIdentityMappings(filters) {
+        await this.ensure();
+        const query = filters.query?.toLowerCase();
+        return (await this.readJsonl(this.identityPath))
+            .filter((record) => !filters.tenant_id || (record.tenant_id ?? "default") === filters.tenant_id)
+            .filter((record) => !filters.platform || record.platform === filters.platform)
+            .filter((record) => !filters.canonical_user || record.canonical_user === filters.canonical_user)
+            .filter((record) => !query || identityHaystack(record).includes(query))
+            .sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at))
+            .slice(0, filters.limit ?? 50);
+    }
+    async resolveIdentity(filters) {
+        const value = filters.value.toLowerCase();
+        return this.listIdentityMappings({
+            tenant_id: filters.tenant_id,
+            platform: filters.platform,
+            query: value,
+            limit: 20
+        });
+    }
     async listScheduledActions(filters) {
         await this.ensure();
         return (await this.readJsonl(this.scheduledPath))
@@ -121,6 +187,22 @@ export class JsonlStore {
             return undefined;
         }
         records[index] = { ...records[index], status: "cancelled" };
+        await writeFile(this.scheduledPath, records.map((record) => JSON.stringify(record)).join("\n") + "\n");
+        return records[index];
+    }
+    async updateScheduledActionStatus(filters) {
+        await this.ensure();
+        const records = await this.readJsonl(this.scheduledPath);
+        const index = records.findIndex((record) => record.id === filters.id && (!filters.tenant_id || record.tenant_id === filters.tenant_id));
+        if (index < 0) {
+            return undefined;
+        }
+        records[index] = {
+            ...records[index],
+            status: filters.status,
+            last_run_at: new Date().toISOString(),
+            result_summary: filters.result_summary
+        };
         await writeFile(this.scheduledPath, records.map((record) => JSON.stringify(record)).join("\n") + "\n");
         return records[index];
     }
@@ -151,5 +233,17 @@ export class JsonlStore {
             await writeFile(filePath, "");
         }
     }
+}
+function uniqueStrings(values) {
+    return [...new Set(values.map((value) => value?.trim()).filter((value) => Boolean(value)))];
+}
+function identityHaystack(record) {
+    return [
+        record.canonical_user,
+        record.display_name,
+        record.platform_user_id,
+        record.platform_user_name,
+        ...record.aliases
+    ].filter(Boolean).join(" ").toLowerCase();
 }
 //# sourceMappingURL=store.js.map

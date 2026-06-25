@@ -20,11 +20,12 @@ flowchart LR
 - Codex plugin: intent routing, workflow rules, safety language, and MCP discovery.
 - MCP server: small stateless adapter that validates inputs and calls the connector API.
 - Connector service: webhooks, signature checks, token refresh, message normalization, storage, retrieval, summarization hooks, send adapters, history sync, and DingTalk OA approval adapters.
-- Storage: normalized messages, conversation authorization metadata, and audit events. The local version stores JSONL files by default or SQLite when `CN_MESSAGING_STORE=sqlite`; production should use a database plus vector or full-text search.
+- Storage: normalized messages, native thread metadata, cross-platform identity mappings, conversation authorization metadata, scheduled actions, and audit events. The local version stores JSONL files by default or SQLite when `CN_MESSAGING_STORE=sqlite`; production should use a database plus vector or full-text search.
 - Group-chat reports: extract key messages, decisions, follow-ups, and risks from bounded message windows. The structure is inspired by chat-report workflows such as `wetrace-skill`.
 - Slack-style workflows: daily digest, notification triage, reply candidate detection, draft reply queues, and Markdown summary documents are implemented above the normalized message store so they can work across Feishu/Lark and DingTalk.
-- Topic/thread layer: the connector can infer topic-centered timelines from normalized messages. Native platform thread ids can be added later without changing the MCP workflow shape.
-- Schedule layer: scheduled digests and messages are stored as pending records. A production worker should execute due records and keep final sends behind explicit confirmation/audit policy.
+- Native/thread layer: the connector preserves platform thread/root/parent ids when adapters expose them, and falls back to inferred topic-centered timelines when native ids are unavailable.
+- Identity layer: Feishu/Lark and DingTalk user ids, display names, and aliases can be mapped to one canonical person so triage and reply workflows behave more like Slack's user-aware notification surfaces.
+- Schedule layer: scheduled digests and messages are stored as pending records. A worker can call `run_due_scheduled_actions` to preview or execute due records while keeping final sends behind explicit confirmation/audit policy.
 
 ## Why This Matches the Slack Pattern
 

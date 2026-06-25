@@ -179,9 +179,12 @@ function normalizeCliMessage(platform: Platform, item: unknown, tenantId: string
   const data = item as Record<string, unknown>;
   const conversationId = firstString(data.conversation_id, data.conversationId, data.chat_id, data.chatId, data.openConversationId);
   const messageId = firstString(data.message_id, data.messageId, data.msgId, data.openMessageId, data.id);
+  const threadId = firstString(data.thread_id, data.threadId, data.root_id, data.rootId, data.parent_id, data.parentMessageId, data.parentMsgId);
+  const parentMessageId = firstString(data.parent_message_id, data.parentMessageId, data.parentMsgId, data.parent_id, data.root_id, data.rootId);
   const sender = firstString(data.sender, data.senderNick, data.sender_name, data.from, data.senderUserId, data.senderStaffId, data.senderOpenDingTalkId);
   const text = firstString(data.text, data.content, data.message, nestedText(data.content), nestedText(data.text));
   const timestamp = firstString(data.timestamp, data.create_time, data.createTime, data.createAt, data.sendTime);
+  const replyCount = firstNumber(data.reply_count, data.replyCount, data.replies);
 
   return {
     tenant_id: tenantId,
@@ -189,8 +192,13 @@ function normalizeCliMessage(platform: Platform, item: unknown, tenantId: string
     conversation_id: conversationId ?? `unknown-${platform}-conversation`,
     conversation_name: firstString(data.conversation_name, data.conversationTitle, data.chat_name, data.chatName, data.title),
     message_id: messageId ?? `${platform}-${JSON.stringify(item).length}-${Date.now()}`,
+    thread_id: threadId,
+    parent_message_id: parentMessageId,
+    reply_count: replyCount,
+    is_thread_parent: replyCount === undefined ? undefined : replyCount > 0,
     sender: sender ?? "unknown",
     sender_id: firstString(data.sender_id, data.senderUserId, data.senderStaffId),
+    mentions: extractMentions(data),
     text: text ?? "",
     timestamp: timestampToIso(timestamp),
     raw_payload: item
@@ -270,6 +278,39 @@ function firstString(...values: unknown[]): string | undefined {
     }
   }
   return undefined;
+}
+
+function firstNumber(...values: unknown[]): number | undefined {
+  for (const value of values) {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+    if (typeof value === "string" && value.length > 0) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+  }
+  return undefined;
+}
+
+function extractMentions(data: Record<string, unknown>): string[] | undefined {
+  const raw = data.mentions ?? data.atUsers ?? data.at_users ?? data.mentionedUsers;
+  const values: string[] = [];
+  if (Array.isArray(raw)) {
+    for (const item of raw) {
+      if (typeof item === "string") {
+        values.push(item);
+      } else if (item && typeof item === "object") {
+        values.push(...[
+          firstString((item as Record<string, unknown>).name, (item as Record<string, unknown>).userName),
+          firstString((item as Record<string, unknown>).userId, (item as Record<string, unknown>).staffId, (item as Record<string, unknown>).openId)
+        ].filter((value): value is string => Boolean(value)));
+      }
+    }
+  }
+  return values.length > 0 ? [...new Set(values)] : undefined;
 }
 
 function timestampToIso(value: string | undefined): string {

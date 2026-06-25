@@ -1,7 +1,7 @@
 {
   "name": "cn-messaging-context",
-  "version": "0.4.0",
-  "description": "Read, summarize, triage, draft, schedule, topic-map, and safely act on Feishu/Lark and DingTalk messages plus DingTalk OA approvals.",
+  "version": "0.5.0",
+  "description": "Read, summarize, triage, draft, schedule, thread-map, identity-map, and safely act on Feishu/Lark and DingTalk messages plus DingTalk OA approvals.",
   "author": {
     "name": "Wuliang"
   },
@@ -22,7 +22,7 @@
   "interface": {
     "displayName": "Feishu / DingTalk Context",
     "shortDescription": "Search Chinese team chat context and handle safe DingTalk approvals.",
-    "longDescription": "Use Feishu/Lark and DingTalk conversations from a separate connector service to sync history, search messages, summarize recent context, generate Slack-style daily digests, triage notifications, identify reply candidates, draft reply queues, create summary documents, map topic threads, create safe schedule records, send user-confirmed messages, and read or approve DingTalk OA items after explicit confirmation.",
+    "longDescription": "Use Feishu/Lark and DingTalk conversations from a separate connector service to sync history, search messages, summarize recent context, generate Slack-style daily digests, triage notifications, identify reply candidates, draft reply queues, create summary documents, read native or topic-inferred threads, map cross-platform identities, run safe schedule workers, send user-confirmed messages, and read or approve DingTalk OA items after explicit confirmation.",
     "developerName": "Wuliang",
     "category": "Communication",
     "capabilities": [
@@ -39,6 +39,9 @@
       "整理今天我需要处理和回复的钉钉消息",
       "生成今天飞书和钉钉的团队消息 digest",
       "把今天的项目群按话题和卡点整理成 thread",
+      "把我的飞书和钉钉身份映射到同一个人名，用于消息分诊",
+      "读取这条消息所在的原生 thread",
+      "检查并预览已经到时间的定时 digest 和消息",
       "每天 18:00 生成钉钉群聊 digest，先不要发送",
       "看看钉钉 OA 有哪些待审批，先不要通过"
     ],

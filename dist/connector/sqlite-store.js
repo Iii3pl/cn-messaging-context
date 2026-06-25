@@ -24,8 +24,13 @@ export class SqliteStore {
         conversation_id TEXT NOT NULL,
         conversation_name TEXT,
         message_id TEXT NOT NULL,
+        thread_id TEXT,
+        parent_message_id TEXT,
+        reply_count INTEGER,
+        is_thread_parent INTEGER,
         sender TEXT NOT NULL,
         sender_id TEXT,
+        mentions TEXT,
         text TEXT NOT NULL,
         timestamp TEXT NOT NULL,
         raw_payload TEXT,
@@ -61,9 +66,39 @@ export class SqliteStore {
         scheduled_for TEXT NOT NULL,
         status TEXT NOT NULL,
         created_at TEXT NOT NULL,
+        last_run_at TEXT,
+        result_summary TEXT,
         payload TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS identity_mappings (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        canonical_user TEXT NOT NULL,
+        display_name TEXT,
+        platform TEXT NOT NULL,
+        platform_user_id TEXT,
+        platform_user_name TEXT,
+        aliases TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
     `);
+        for (const statement of [
+            "ALTER TABLE messages ADD COLUMN thread_id TEXT",
+            "ALTER TABLE messages ADD COLUMN parent_message_id TEXT",
+            "ALTER TABLE messages ADD COLUMN reply_count INTEGER",
+            "ALTER TABLE messages ADD COLUMN is_thread_parent INTEGER",
+            "ALTER TABLE messages ADD COLUMN mentions TEXT",
+            "ALTER TABLE scheduled_actions ADD COLUMN last_run_at TEXT",
+            "ALTER TABLE scheduled_actions ADD COLUMN result_summary TEXT"
+        ]) {
+            try {
+                this.db.exec(statement);
+            }
+            catch {
+                // Existing databases may already have the column.
+            }
+        }
         try {
             this.db.exec(`
         CREATE VIRTUAL TABLE IF NOT EXISTS message_fts USING fts5(
@@ -86,10 +121,11 @@ export class SqliteStore {
         const normalized = { ...record, tenant_id: tenantId };
         const result = db.prepare(`
       INSERT OR IGNORE INTO messages (
-        tenant_id, platform, conversation_id, conversation_name, message_id, sender,
-        sender_id, text, timestamp, raw_payload, context_summary
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(tenantId, normalized.platform, normalized.conversation_id, normalized.conversation_name ?? null, normalized.message_id, normalized.sender, normalized.sender_id ?? null, normalized.text, normalized.timestamp, normalized.raw_payload === undefined ? null : JSON.stringify(normalized.raw_payload), normalized.context_summary ?? null);
+        tenant_id, platform, conversation_id, conversation_name, message_id, thread_id,
+        parent_message_id, reply_count, is_thread_parent, sender, sender_id, mentions,
+        text, timestamp, raw_payload, context_summary
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(tenantId, normalized.platform, normalized.conversation_id, normalized.conversation_name ?? null, normalized.message_id, normalized.thread_id ?? null, normalized.parent_message_id ?? null, normalized.reply_count ?? null, normalized.is_thread_parent === undefined ? null : Number(normalized.is_thread_parent), normalized.sender, normalized.sender_id ?? null, normalized.mentions ? JSON.stringify(normalized.mentions) : null, normalized.text, normalized.timestamp, normalized.raw_payload === undefined ? null : JSON.stringify(normalized.raw_payload), normalized.context_summary ?? null);
         db.prepare(`
       INSERT INTO conversations (tenant_id, platform, conversation_id, conversation_name, authorized, updated_at)
       VALUES (?, ?, ?, ?, 1, ?)
@@ -121,6 +157,10 @@ export class SqliteStore {
         if (filters.conversation_id) {
             clauses.push("m.conversation_id = ?");
             params.push(filters.conversation_id);
+        }
+        if (filters.thread_id) {
+            clauses.push("(m.thread_id = ? OR m.parent_message_id = ?)");
+            params.push(filters.thread_id, filters.thread_id);
         }
         if (filters.sender) {
             clauses.push("(lower(m.sender) LIKE ? OR lower(COALESCE(m.sender_id, '')) LIKE ?)");
@@ -227,6 +267,90 @@ export class SqliteStore {
     `).run(scheduled.id, scheduled.tenant_id ?? null, scheduled.action, scheduled.platform ?? null, scheduled.conversation_id ?? null, scheduled.conversation_name ?? null, scheduled.scheduled_for, scheduled.status, scheduled.created_at, JSON.stringify(scheduled.payload));
         return scheduled;
     }
+    async upsertIdentityMapping(record) {
+        const db = await this.database();
+        const tenantId = tenantIdOf(record.tenant_id);
+        const now = new Date().toISOString();
+        const aliases = uniqueStrings([
+            ...record.aliases,
+            record.display_name,
+            record.platform_user_name,
+            record.platform_user_id,
+            record.canonical_user
+        ]);
+        const existing = db.prepare(`
+      SELECT * FROM identity_mappings
+      WHERE tenant_id = ? AND platform = ? AND (
+        (? IS NOT NULL AND platform_user_id = ?) OR
+        (? IS NOT NULL AND platform_user_name = ?) OR
+        canonical_user = ?
+      )
+      LIMIT 1
+    `).get(tenantId, record.platform, record.platform_user_id ?? null, record.platform_user_id ?? null, record.platform_user_name ?? null, record.platform_user_name ?? null, record.canonical_user);
+        const mapping = existing
+            ? {
+                ...rowToIdentityMapping(existing),
+                ...record,
+                tenant_id: tenantId,
+                aliases: uniqueStrings([...JSON.parse(existing.aliases), ...aliases]),
+                updated_at: now
+            }
+            : {
+                id: crypto.randomUUID(),
+                created_at: now,
+                updated_at: now,
+                ...record,
+                tenant_id: tenantId,
+                aliases
+            };
+        db.prepare(`
+      INSERT INTO identity_mappings (
+        id, tenant_id, canonical_user, display_name, platform, platform_user_id,
+        platform_user_name, aliases, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        canonical_user = excluded.canonical_user,
+        display_name = excluded.display_name,
+        platform_user_id = excluded.platform_user_id,
+        platform_user_name = excluded.platform_user_name,
+        aliases = excluded.aliases,
+        updated_at = excluded.updated_at
+    `).run(mapping.id, tenantId, mapping.canonical_user, mapping.display_name ?? null, mapping.platform, mapping.platform_user_id ?? null, mapping.platform_user_name ?? null, JSON.stringify(mapping.aliases), mapping.created_at, mapping.updated_at);
+        return mapping;
+    }
+    async listIdentityMappings(filters) {
+        const db = await this.database();
+        const clauses = ["tenant_id = ?"];
+        const params = [tenantIdOf(filters.tenant_id)];
+        if (filters.platform) {
+            clauses.push("platform = ?");
+            params.push(filters.platform);
+        }
+        if (filters.canonical_user) {
+            clauses.push("canonical_user = ?");
+            params.push(filters.canonical_user);
+        }
+        if (filters.query) {
+            const query = `%${filters.query.toLowerCase()}%`;
+            clauses.push("(lower(canonical_user) LIKE ? OR lower(COALESCE(display_name, '')) LIKE ? OR lower(COALESCE(platform_user_id, '')) LIKE ? OR lower(COALESCE(platform_user_name, '')) LIKE ? OR lower(aliases) LIKE ?)");
+            params.push(query, query, query, query, query);
+        }
+        const rows = db.prepare(`
+      SELECT * FROM identity_mappings
+      WHERE ${clauses.join(" AND ")}
+      ORDER BY updated_at DESC
+      LIMIT ?
+    `).all(...params, filters.limit ?? 50);
+        return rows.map(rowToIdentityMapping);
+    }
+    async resolveIdentity(filters) {
+        return this.listIdentityMappings({
+            tenant_id: filters.tenant_id,
+            platform: filters.platform,
+            query: filters.value,
+            limit: 20
+        });
+    }
     async listScheduledActions(filters) {
         const db = await this.database();
         const clauses = [];
@@ -260,6 +384,22 @@ export class SqliteStore {
         const row = db.prepare(`SELECT * FROM scheduled_actions WHERE ${clauses.join(" AND ")}`).get(...params);
         return row ? rowToScheduledAction(row) : undefined;
     }
+    async updateScheduledActionStatus(filters) {
+        const db = await this.database();
+        const clauses = ["id = ?"];
+        const params = [filters.id];
+        if (filters.tenant_id) {
+            clauses.push("tenant_id = ?");
+            params.push(filters.tenant_id);
+        }
+        db.prepare(`
+      UPDATE scheduled_actions
+      SET status = ?, last_run_at = ?, result_summary = ?
+      WHERE ${clauses.join(" AND ")}
+    `).run(filters.status, new Date().toISOString(), filters.result_summary ?? null, ...params);
+        const row = db.prepare(`SELECT * FROM scheduled_actions WHERE ${clauses.join(" AND ")}`).get(...params);
+        return row ? rowToScheduledAction(row) : undefined;
+    }
     async database() {
         await this.ensure();
         if (!this.db) {
@@ -275,8 +415,13 @@ function rowToMessage(row) {
         conversation_id: row.conversation_id,
         conversation_name: row.conversation_name ?? undefined,
         message_id: row.message_id,
+        thread_id: row.thread_id ?? undefined,
+        parent_message_id: row.parent_message_id ?? undefined,
+        reply_count: row.reply_count ?? undefined,
+        is_thread_parent: row.is_thread_parent === null || row.is_thread_parent === undefined ? undefined : Boolean(row.is_thread_parent),
         sender: row.sender,
         sender_id: row.sender_id ?? undefined,
+        mentions: row.mentions ? JSON.parse(row.mentions) : undefined,
         text: row.text,
         timestamp: row.timestamp,
         raw_payload: row.raw_payload ? JSON.parse(row.raw_payload) : undefined,
@@ -294,10 +439,29 @@ function rowToScheduledAction(row) {
         scheduled_for: row.scheduled_for,
         status: row.status,
         created_at: row.created_at,
+        last_run_at: row.last_run_at ?? undefined,
+        result_summary: row.result_summary ?? undefined,
         payload: JSON.parse(row.payload)
+    };
+}
+function rowToIdentityMapping(row) {
+    return {
+        id: row.id,
+        tenant_id: row.tenant_id,
+        canonical_user: row.canonical_user,
+        display_name: row.display_name ?? undefined,
+        platform: row.platform,
+        platform_user_id: row.platform_user_id ?? undefined,
+        platform_user_name: row.platform_user_name ?? undefined,
+        aliases: JSON.parse(row.aliases),
+        created_at: row.created_at,
+        updated_at: row.updated_at
     };
 }
 function tenantIdOf(value) {
     return value && value.length > 0 ? value : "default";
+}
+function uniqueStrings(values) {
+    return [...new Set(values.map((value) => value?.trim()).filter((value) => Boolean(value)))];
 }
 //# sourceMappingURL=sqlite-store.js.map

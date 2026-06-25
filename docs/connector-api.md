@@ -47,6 +47,7 @@ Query parameters:
 - `conversation_id`
 - `query`
 - `sender`
+- `thread_id`
 - `since`: ISO timestamp
 - `until`: ISO timestamp
 - `limit`: default `50`
@@ -58,6 +59,18 @@ Query parameters:
 - `platform`
 - `conversation_id`
 - `limit`: default `50`
+
+### `GET /messages/thread`
+
+Query parameters:
+
+- `platform`: `feishu` or `dingtalk`
+- `conversation_id`: optional but recommended for authorization and faster lookup
+- `thread_id`: platform native thread/root id, when known
+- `message_id`: anchor message id, used when `thread_id` is unknown
+- `limit`: default `100`
+
+Returns messages from the same native thread when the connector has thread/root/parent ids. If only `message_id` is supplied, the connector infers the thread from the anchor message.
 
 ### `POST /messages/summarize`
 
@@ -171,6 +184,41 @@ Body:
 
 Returns a bounded timeline with decisions and blockers for the selected topic.
 
+## Identity APIs
+
+### `POST /identities`
+
+Body:
+
+```json
+{
+  "canonical_user": "吴亮",
+  "display_name": "吴亮",
+  "platform": "dingtalk",
+  "platform_user_id": "staff_xxx",
+  "platform_user_name": "无量",
+  "aliases": ["wuliang", "吴亮的小马"]
+}
+```
+
+Creates or updates a cross-platform identity mapping. Notification triage and reply-candidate workflows use these aliases when `current_user` is supplied.
+
+### `GET /identities`
+
+Query parameters:
+
+- `platform`
+- `canonical_user`
+- `query`
+- `limit`: default `50`
+
+### `GET /identities/resolve`
+
+Query parameters:
+
+- `value`: alias, display name, platform user id, or canonical user
+- `platform`: optional platform filter
+
 ## Schedule APIs
 
 ### `POST /schedules/digest`
@@ -199,6 +247,20 @@ Lists scheduled action records.
 ### `POST /schedules/:id/cancel`
 
 Cancels a scheduled action record.
+
+### `POST /schedules/run-due`
+
+Body:
+
+```json
+{
+  "now": "2026-06-25T18:00:00+08:00",
+  "execute": false,
+  "limit": 50
+}
+```
+
+Previews due records by default. Set `execute: true` only for a trusted worker or explicit user request. Digest actions are generated at run time. Scheduled messages use the original confirmation record and still honor `CN_MESSAGING_DRY_RUN`.
 
 ## Write API
 

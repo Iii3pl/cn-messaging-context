@@ -9,11 +9,13 @@
 - Audit read and write actions: actor, platform, destination, action type, timestamp, and result.
 - Redact message payloads in operational logs unless explicitly needed for debugging in a secure environment.
 - Deduplicate webhook events by `platform + message_id` to avoid repeated storage or repeated actions.
+- Store only work identity handles needed for routing when using identity mappings. Do not store private phone numbers, tokens, cookies, or unrelated personal data as aliases.
 
 ## Schedule Safety
 
-Scheduled digests and messages are stored as pending records only. This package does not start a hidden background sender. Production workers must:
+Scheduled digests and messages are stored as pending records. This package does not start a hidden background sender. Workers must:
 
+- Preview due records first unless the caller explicitly sets `execute: true`.
 - Re-check permissions and destination before execution.
 - Preserve the original confirmation summary for scheduled messages.
 - Keep broad mentions and high-impact groups behind explicit review.

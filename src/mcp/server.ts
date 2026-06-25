@@ -40,7 +40,7 @@ function textResult(value: unknown) {
 
 const server = new McpServer({
   name: "cn-messaging-context",
-  version: "0.4.0"
+  version: "0.5.0"
 });
 
 server.registerTool(
@@ -67,6 +67,7 @@ server.registerTool(
       conversation_id: z.string().optional(),
       query: z.string().optional(),
       sender: z.string().optional(),
+      thread_id: z.string().optional(),
       since: timestampSchema.optional(),
       until: timestampSchema.optional(),
       limit: z.number().int().min(1).max(200).default(50)
@@ -87,6 +88,22 @@ server.registerTool(
     }
   },
   async (args) => textResult(await connectorRequest(appendQuery("/messages/recent", args)))
+);
+
+server.registerTool(
+  "read_native_thread",
+  {
+    title: "Read native message thread",
+    description: "Read a platform-native Feishu or DingTalk thread when thread/root/parent ids are available in synced messages.",
+    inputSchema: {
+      platform: platformSchema,
+      conversation_id: z.string().optional(),
+      thread_id: z.string().optional(),
+      message_id: z.string().optional(),
+      limit: z.number().int().min(1).max(200).default(100)
+    }
+  },
+  async (args) => textResult(await connectorRequest(appendQuery("/messages/thread", args)))
 );
 
 server.registerTool(
@@ -358,7 +375,7 @@ server.registerTool(
     title: "List scheduled actions",
     description: "List pending, cancelled, or completed digest/message schedule records.",
     inputSchema: {
-      status: z.enum(["pending", "cancelled", "completed"]).optional(),
+      status: z.enum(["pending", "cancelled", "completed", "failed"]).optional(),
       limit: z.number().int().min(1).max(200).default(50)
     }
   },
@@ -384,6 +401,26 @@ server.registerTool(
 );
 
 server.registerTool(
+  "run_due_scheduled_actions",
+  {
+    title: "Run due scheduled actions",
+    description: "Preview or execute due scheduled digests/messages. Message sends still honor connector dry-run and prior confirmation records.",
+    inputSchema: {
+      now: timestampSchema.optional(),
+      execute: z.boolean().default(false),
+      limit: z.number().int().min(1).max(100).default(50)
+    }
+  },
+  async (args) =>
+    textResult(
+      await connectorRequest("/schedules/run-due", {
+        method: "POST",
+        body: JSON.stringify(args)
+      })
+    )
+);
+
+server.registerTool(
   "sync_history",
   {
     title: "Sync platform history",
@@ -404,6 +441,57 @@ server.registerTool(
         body: JSON.stringify(args)
       })
     )
+);
+
+server.registerTool(
+  "upsert_identity_mapping",
+  {
+    title: "Upsert identity mapping",
+    description: "Map one Feishu or DingTalk user id/name to a canonical person for cross-platform triage and reply routing.",
+    inputSchema: {
+      canonical_user: z.string().min(1),
+      display_name: z.string().optional(),
+      platform: platformSchema,
+      platform_user_id: z.string().optional(),
+      platform_user_name: z.string().optional(),
+      aliases: z.array(z.string()).default([])
+    }
+  },
+  async (args) =>
+    textResult(
+      await connectorRequest("/identities", {
+        method: "POST",
+        body: JSON.stringify(args)
+      })
+    )
+);
+
+server.registerTool(
+  "list_identity_mappings",
+  {
+    title: "List identity mappings",
+    description: "List canonical user mappings used for cross-platform Feishu/DingTalk notification triage.",
+    inputSchema: {
+      platform: platformSchema.optional(),
+      canonical_user: z.string().optional(),
+      query: z.string().optional(),
+      limit: z.number().int().min(1).max(200).default(50)
+    }
+  },
+  async (args) => textResult(await connectorRequest(appendQuery("/identities", args)))
+);
+
+server.registerTool(
+  "resolve_identity",
+  {
+    title: "Resolve identity",
+    description: "Resolve a user alias, platform user id, or display name into canonical identity mappings.",
+    inputSchema: {
+      platform: platformSchema.optional(),
+      value: z.string().min(1)
+    }
+  },
+  async (args) => textResult(await connectorRequest(appendQuery("/identities/resolve", args)))
 );
 
 server.registerTool(

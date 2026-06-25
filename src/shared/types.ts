@@ -6,8 +6,13 @@ export interface MessageRecord {
   conversation_id: string;
   conversation_name?: string;
   message_id: string;
+  thread_id?: string;
+  parent_message_id?: string;
+  reply_count?: number;
+  is_thread_parent?: boolean;
   sender: string;
   sender_id?: string;
+  mentions?: string[];
   text: string;
   timestamp: string;
   raw_payload?: unknown;
@@ -42,9 +47,24 @@ export interface ScheduledActionRecord {
   conversation_id?: string;
   conversation_name?: string;
   scheduled_for: string;
-  status: "pending" | "cancelled" | "completed";
+  status: "pending" | "cancelled" | "completed" | "failed";
   created_at: string;
+  last_run_at?: string;
+  result_summary?: string;
   payload: Record<string, unknown>;
+}
+
+export interface IdentityMappingRecord {
+  id: string;
+  tenant_id?: string;
+  canonical_user: string;
+  display_name?: string;
+  platform: Platform;
+  platform_user_id?: string;
+  platform_user_name?: string;
+  aliases: string[];
+  created_at: string;
+  updated_at: string;
 }
 
 export interface ApprovalRecord {
