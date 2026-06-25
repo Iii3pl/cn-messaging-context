@@ -1,5 +1,7 @@
 # Feishu / DingTalk Context Plugin
 
+English | [中文](./README.zh-CN.md)
+
 `cn-messaging-context` is a Codex plugin pattern for Chinese workplace messaging and approvals:
 
 - Codex plugin metadata and skills expose the user experience.
