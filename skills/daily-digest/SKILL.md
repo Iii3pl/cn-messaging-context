@@ -14,6 +14,8 @@ Use this skill when the user asks for a daily recap, 今日摘要, 群聊日报,
 3. If the user asks for a shareable document, call `create_summary_doc` after the digest.
 4. If the user asks to send the digest to a group, switch to [../message-reply/SKILL.md](../message-reply/SKILL.md).
 
+For DingTalk group reports, an authorized group with an empty report usually means the connector has not imported that group's history yet. Use `sync_history` with the `openConversationId` and the requested date window before creating the digest.
+
 ## Output Shape
 
 Use this structure:

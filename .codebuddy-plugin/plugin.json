@@ -1,6 +1,6 @@
 {
   "name": "cn-messaging-context",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "Read, summarize, triage, publish, safely act on Feishu/Lark, DingTalk, local WeChat, and Tencent Docs context, with one-command onboarding and issue reporting.",
   "author": {
     "name": "Wuliang"

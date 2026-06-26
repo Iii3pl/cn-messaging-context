@@ -96,6 +96,8 @@ dws auth status
 dws doctor
 ```
 
+钉钉群聊日报/重点消息依赖两步：先把群加入连接器授权列表，再用 `sync_history` 导入这个群的历史消息。新版适配器会对指定群使用 `dws chat message list --group <openConversationId>`；如果报告为空，优先检查是否还没同步历史，不要直接判断为群不存在或权限失败。
+
 参考：[dingtalk-workspace-cli on npm](https://www.npmjs.com/package/dingtalk-workspace-cli)。
 
 ### 腾讯文档

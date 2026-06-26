@@ -4,8 +4,9 @@ import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const repoRoot = path.resolve(new URL("..", import.meta.url).pathname);
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const pluginName = "cn-messaging-context";
 const connectorUrl = "http://127.0.0.1:8787";
 
@@ -64,7 +65,7 @@ async function main() {
   if (options.codex) {
     step("登记到 Codex 个人插件市场");
     await ensureMarketplace(marketplacePath, targetDir);
-    await tryRun("codex", ["plugin", "marketplace", "add", "~"], { cwd: targetDir });
+    await tryRun("codex", ["plugin", "marketplace", "add", homedir()], { cwd: targetDir });
     await run("codex", ["plugin", "add", `${pluginName}@personal`], { cwd: targetDir });
   }
 
@@ -351,6 +352,8 @@ async function isHealthy() {
 
 async function ensureMarketplace(marketplaceFile, pluginDir) {
   await mkdir(path.dirname(marketplaceFile), { recursive: true });
+  const pluginJson = JSON.parse(await readFile(path.join(repoRoot, ".codex-plugin/plugin.json"), "utf8"));
+  const relativeSource = path.relative(homedir(), pluginDir);
   const marketplace = existsSync(marketplaceFile)
     ? JSON.parse(await readFile(marketplaceFile, "utf8"))
     : {
@@ -367,15 +370,10 @@ async function ensureMarketplace(marketplaceFile, pluginDir) {
   marketplace.plugins = Array.isArray(marketplace.plugins) ? marketplace.plugins : [];
   const entry = {
     name: pluginName,
-    source: {
-      source: "local",
-      path: pluginDir
-    },
-    policy: {
-      installation: "AVAILABLE",
-      authentication: "ON_INSTALL"
-    },
-    category: "Productivity"
+    description: pluginJson.description,
+    version: pluginJson.version,
+    author: pluginJson.author,
+    source: relativeSource.startsWith("..") ? pluginDir : `./${relativeSource}`
   };
   const existingIndex = marketplace.plugins.findIndex((plugin) => plugin?.name === pluginName);
   if (existingIndex >= 0) {

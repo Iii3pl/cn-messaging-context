@@ -180,20 +180,56 @@ async function syncFeishuHistory(request: HistorySyncRequest): Promise<MessageRe
 }
 
 async function syncDingTalkHistory(request: HistorySyncRequest): Promise<MessageRecord[]> {
-  const args = ["chat", "message", request.query ? "search" : "list-all", "--format", "json", "--limit", String(request.limit ?? 50)];
   const end = request.until ?? new Date().toISOString();
   const start = request.since ?? new Date(Date.parse(end) - 24 * 60 * 60 * 1000).toISOString();
+  const args = buildDingTalkHistoryArgs(request, start, end);
+
+  try {
+    const raw = await runJson("dws", args);
+    return extractDingTalkMessages(raw).map((item) => normalizeCliMessage("dingtalk", item, request.tenant_id));
+  } catch (error) {
+    throw improveDingTalkHistoryError(error, args);
+  }
+}
+
+function buildDingTalkHistoryArgs(request: HistorySyncRequest, start: string, end: string): string[] {
+  if (request.query) {
+    const args = ["chat", "message", "search", "--format", "json", "--limit", String(request.limit ?? 50), "--keyword", request.query, "--start", start, "--end", end];
+    if (request.conversation_id) {
+      args.push("--group", request.conversation_id);
+    }
+    return args;
+  }
 
   if (request.conversation_id) {
-    args.push("--group", request.conversation_id);
+    return [
+      "chat",
+      "message",
+      "list",
+      "--format",
+      "json",
+      "--limit",
+      String(request.limit ?? 50),
+      "--group",
+      request.conversation_id,
+      "--time",
+      dingTalkCliDateTime(start)
+    ];
   }
-  if (request.query) {
-    args.push("--keyword", request.query);
-  }
-  args.push("--start", start, "--end", end);
 
-  const raw = await runJson("dws", args);
-  return extractDingTalkMessages(raw).map((item) => normalizeCliMessage("dingtalk", item, request.tenant_id));
+  return [
+    "chat",
+    "message",
+    "list-all",
+    "--format",
+    "json",
+    "--limit",
+    String(request.limit ?? 50),
+    "--start",
+    dingTalkCliDateTime(start),
+    "--end",
+    dingTalkCliDateTime(end)
+  ];
 }
 
 async function syncWechatHistory(request: HistorySyncRequest): Promise<MessageRecord[]> {
@@ -398,6 +434,33 @@ function timestampToIso(value: string | undefined): string {
   }
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? new Date(parsed).toISOString() : new Date().toISOString();
+}
+
+function dingTalkCliDateTime(value: string): string {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) {
+    return value;
+  }
+  const parts = new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false
+  }).formatToParts(date);
+  const get = (type: string) => parts.find((part) => part.type === type)?.value ?? "00";
+  return `${get("year")}-${get("month")}-${get("day")} ${get("hour")}:${get("minute")}:${get("second")}`;
+}
+
+function improveDingTalkHistoryError(error: unknown, args: string[]): Error {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/unknown flag: --group|flag provided but not defined:.*group/i.test(message) && args.includes("list-all")) {
+    return new Error("钉钉群消息同步用了旧的全局历史命令。请升级 cn-messaging-context；新版会用 `dws chat message list --group <群ID>` 读取指定群。");
+  }
+  return error instanceof Error ? error : new Error(message);
 }
 
 function recoverDwsExpPayload(error: unknown): unknown | undefined {

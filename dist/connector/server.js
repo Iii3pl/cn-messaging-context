@@ -813,10 +813,10 @@ function summarizeMessages(messages) {
     const senders = [...new Set(messages.map((message) => message.sender).filter(Boolean))].slice(0, 8);
     const highlights = messages
         .slice(0, 5)
-        .map((message) => `- ${message.timestamp} ${message.sender}: ${message.text}`)
+        .map((message) => `- ${formatDisplayTime(message.timestamp)} ${message.sender}: ${message.text}`)
         .join("\n");
     return [
-        `共找到 ${messages.length} 条消息，最近一条来自 ${latest.sender}，时间 ${latest.timestamp}。`,
+        `共找到 ${messages.length} 条消息，最近一条来自 ${latest.sender}，时间 ${formatDisplayTime(latest.timestamp)}。`,
         `参与者：${senders.join("、") || "未知"}。`,
         "近期要点：",
         highlights
@@ -883,11 +883,11 @@ function buildConversationReport(messages, filters) {
     return [
         "# 群聊报告",
         "",
-        `范围：${filters.since ?? "未限定"} 至 ${filters.until ?? "未限定"}${filters.query ? `，关键词：${filters.query}` : ""}`,
+        `范围：${formatDisplayTime(filters.since) ?? "未限定"} 至 ${formatDisplayTime(filters.until) ?? "未限定"}${filters.query ? `，关键词：${filters.query}` : ""}`,
         `消息数：${messages.length}，参与者：${senders.slice(0, 12).join("、") || "未知"}`,
         "",
         "## 关键消息",
-        ...sorted.slice(-10).reverse().map((message) => `- ${message.timestamp} ${message.sender}: ${message.text}`),
+        ...sorted.slice(-10).reverse().map((message) => `- ${formatDisplayTime(message.timestamp)} ${message.sender}: ${message.text}`),
         "",
         "## 决策/结论",
         ...(decisions.length > 0 ? decisions.map((message) => `- ${message.sender}: ${message.text}`) : ["- 暂未识别到明确决策。"]),
@@ -898,6 +898,27 @@ function buildConversationReport(messages, filters) {
         "## 风险/异常",
         ...(risks.length > 0 ? risks.map((message) => `- ${message.sender}: ${message.text}`) : ["- 暂未识别到明显风险。"])
     ].join("\n");
+}
+function formatDisplayTime(value) {
+    if (!value) {
+        return undefined;
+    }
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) {
+        return value;
+    }
+    const parts = new Intl.DateTimeFormat("zh-CN", {
+        timeZone: "Asia/Shanghai",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false
+    }).formatToParts(date);
+    const get = (type) => parts.find((part) => part.type === type)?.value ?? "00";
+    return `${get("year")}-${get("month")}-${get("day")} ${get("hour")}:${get("minute")}:${get("second")} 北京时间`;
 }
 async function getWorkflowMessages(req, body) {
     const tenant_id = tenantId(req);
