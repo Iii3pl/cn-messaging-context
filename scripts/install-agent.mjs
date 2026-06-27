@@ -323,6 +323,7 @@ async function ensureConnector(pluginDir) {
     stdio: ["ignore", "ignore", "ignore"],
     env: {
       ...process.env,
+      CN_MESSAGING_DRY_RUN: process.env.CN_MESSAGING_DRY_RUN ?? "false",
       CN_MESSAGING_STORE: process.env.CN_MESSAGING_STORE ?? "sqlite",
       CN_MESSAGING_DATA_DIR: process.env.CN_MESSAGING_DATA_DIR ?? dataDir
     }
