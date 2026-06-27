@@ -19,6 +19,15 @@ Use this skill when the user asks about DingTalk OA approvals, pending approvals
    - whether the current account can act
 4. If the records or workflow state disagree with the pending list, report the disagreement and do not approve.
 
+## Optional CRM Preaudit
+
+When an approval has project, customer, applicant, amount, department, reimbursement, supplier settlement, purchase, or contract context, and CRM access is enabled, call `preaudit_approval_with_crm` before recommending action. Use the CRM result only as read-only evidence:
+
+- Treat `risk_level=green` as "no obvious CRM issue found", not as permission to approve.
+- Treat `unknown` or `warn` checks as items for the user to review.
+- Never fabricate missing CRM project or applicant data.
+- Do not approve based only on CRM preaudit; the regular task/record confirmation and explicit user confirmation are still required.
+
 ## How To Explain It To People
 
 Use plain workplace language in the final answer. Avoid exposing internal words such as `RUNNING`, `taskId`, `instance_id`, `PARAM_ERROR`, `saNode`, `127.0.0.1`, or `dry-run` unless the user explicitly asks for debugging detail.

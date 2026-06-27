@@ -15,6 +15,7 @@
 - Keep Tencent Docs OAuth/OpenAPI credentials and MCP tokens in connector-service environment or secret storage only.
 - Keep GitHub tokens outside plugin files. Error reports must redact tokens, cookies, webhook signatures, secrets, authorization headers, long numeric ids, and phone-like values before creating Issues.
 - Keep local WeChat `wx-cli` config, database keys, cache files, and raw chat databases on the user's machine. Do not attach them to GitHub Issues, logs, Codex context, or plugin files.
+- CRM CLI access is optional, local, and read-only. Keep it disabled unless the connector runs in a trusted environment with `CN_MESSAGING_CRM_ENABLED=true`.
 
 ## Feishu/Lark User Read Safety
 
@@ -71,3 +72,15 @@ For DingTalk OA approvals:
 - Reject approval calls without `confirmed_by_user`.
 - Keep dry-run mode enabled until the organization validates the workflow.
 - Store task id, remark length, and confirmation summary in audit metadata, not platform credentials.
+- CRM-backed approval preaudit may add project, applicant, department, amount, and period evidence, but missing CRM data must stay `unknown` or `warn`; it must not be converted into automatic approval.
+
+## CRM CLI Safety
+
+CRM support calls the configured local CLI only for read actions:
+
+- project search
+- project detail
+- organization user lookup
+- approval preaudit evidence checks
+
+Do not enable CRM writes in this plugin. Do not store CRM credentials in plugin files. Operational logs should keep counts, ids, and concise diagnostics rather than full CRM payloads unless debugging in a secure local environment.

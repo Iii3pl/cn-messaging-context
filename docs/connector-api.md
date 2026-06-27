@@ -477,6 +477,52 @@ Body:
 
 When dry-run mode is enabled, approval actions create audit events but do not call DingTalk write APIs.
 
+## CRM CLI Read APIs
+
+CRM access is optional and disabled by default. Enable it only in trusted local connector environments:
+
+```bash
+CN_MESSAGING_CRM_ENABLED=true
+CN_MESSAGING_CRM_CLI=crm
+```
+
+### `GET /crm/status`
+
+Returns whether read-only CRM CLI access is enabled and whether the configured CLI command is available.
+
+### `GET /crm/projects/search?query=<keyword>&limit=10`
+
+Runs a read-only CRM project search and returns normalized project records plus the raw CLI result.
+
+### `GET /crm/projects/:project_id/detail`
+
+Reads one CRM project detail by CRM project id.
+
+### `GET /crm/users/lookup?name=<name>&limit=5`
+
+Looks up CRM organization users by display name.
+
+### `POST /approvals/preaudit/crm`
+
+Runs CRM-backed read-only evidence checks for an approval payload. This never sends messages, writes CRM data, or approves anything.
+
+Body:
+
+```json
+{
+  "source": "dingtalk",
+  "approval_id": "process-instance-id",
+  "title": "供应商结算单",
+  "amount": 5000,
+  "applicant": "张三",
+  "department": "运营中心 → 运营六部 → 规模2组",
+  "project": "淘宝秒杀 b站4月代运营",
+  "project_refs": ["淘宝秒杀 b站4月代运营"]
+}
+```
+
+The response includes `checks`, `evidence`, `missing_context`, `risk_level`, `recommendation`, and optional `crm_project_match` / `applicant` records. Missing CRM data is returned as `unknown` or `warn`; it is never treated as an approval green light.
+
 ## Status API
 
 ### `GET /issue-reporter/status`
@@ -506,4 +552,4 @@ Creates or previews a redacted GitHub Issue. Preview mode is the default; set `C
 
 ### `GET /integrations/status`
 
-Returns configured platforms, dry-run mode, data directory, connector health, workspace adapter status, and GitHub issue reporter status.
+Returns configured platforms, dry-run mode, data directory, connector health, optional CRM status, workspace adapter status, and GitHub issue reporter status.

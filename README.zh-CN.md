@@ -20,6 +20,7 @@
 - 用户确认后发送飞书或钉钉消息。
 - 查询钉钉 OA 待审批、详情、任务和审批流水。
 - 用户确认后通过钉钉 OA 审批。
+- 可选启用本地 CRM CLI 只读查询，用于审批前项目、申请人、部门和金额证据预审；默认关闭。
 - 发布摘要到飞书文档、钉钉文档、在线表格、多维表格 / AI 表格、白板等工作区资源。
 - 读取腾讯文档资源，当前通过连接器侧 OpenAPI/OAuth 凭据或 MCP 桥接。
 - 当飞书机器人/应用权限读不到群聊或文档时，先询问用户，再用用户权限只读本次请求。
@@ -124,6 +125,17 @@ export TENCENT_DOCS_MCP_TOKEN=...
 ```bash
 curl http://127.0.0.1:8787/workspace/status
 ```
+
+### CRM CLI（可选，只读）
+
+CRM 能力默认关闭，只建议在可信本地环境中开启：
+
+```bash
+export CN_MESSAGING_CRM_ENABLED=true
+export CN_MESSAGING_CRM_CLI=crm
+```
+
+启用后可通过 MCP/connector 做项目搜索、项目详情、组织人员查询，以及审批 CRM 证据预审。预审只返回 `checks/evidence/missing_context/recommendation`，不会发送消息、写 CRM 或通过审批；CRM 缺数据会保持 `unknown` / `warn`，不会被当作绿色通过。
 
 ### 微信本地聊天
 

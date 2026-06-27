@@ -91,6 +91,89 @@ export interface ApprovalRecord {
   raw_payload?: unknown;
 }
 
+export interface CrmStatus {
+  enabled: boolean;
+  cli: "available" | "missing" | "disabled";
+  command: string;
+  timeout_ms: number;
+}
+
+export interface CrmProjectRecord {
+  source: "crm.project.list" | "crm.project.detail";
+  crm_project_id?: number;
+  project_unique_sn?: string;
+  project_name?: string;
+  project_full_name?: string;
+  amount_yuan?: number;
+  project_begin_at?: string;
+  project_end_at?: string;
+  status?: string | number;
+  approval_status?: string | number;
+  approval_status_str?: string;
+  charge_department_name?: string;
+  charge_department_path?: string;
+  project_owner_names?: string;
+  contract_order_id?: string | number;
+  order_name?: string;
+  order_sn?: string;
+  sub_order_sn?: string;
+  order_amount_yuan?: number;
+  order_customer_name?: string;
+  raw_payload?: unknown;
+}
+
+export interface CrmUserRecord {
+  source: "crm.org.users";
+  name?: string;
+  job_number?: string;
+  title?: string;
+  department_name?: string;
+  department_path?: string;
+  user_id?: string | number;
+  raw_payload?: unknown;
+}
+
+export interface ApprovalPreauditCheck {
+  id: string;
+  status: "pass" | "warn" | "fail" | "unknown";
+  severity: "info" | "yellow" | "red";
+  message: string;
+  evidence?: Record<string, unknown>;
+}
+
+export interface CrmApprovalPreauditRequest {
+  source?: "dingtalk" | "cmb_xft" | "external";
+  approval_id?: string;
+  title?: string;
+  process_name?: string;
+  amount?: number;
+  applicant?: string;
+  department?: string;
+  project?: string;
+  project_refs?: string[];
+  raw_detail?: unknown;
+}
+
+export interface CrmApprovalPreauditResult {
+  ok: boolean;
+  risk_level: "green" | "yellow" | "red" | "unknown";
+  recommendation: "pass" | "manual_review" | "reject_or_return" | "unknown";
+  confidence: "high" | "medium" | "low" | "unknown";
+  checks: ApprovalPreauditCheck[];
+  evidence: Array<{ source: string; kind: string; data: Record<string, unknown> }>;
+  missing_context: string[];
+  crm_project_match?: {
+    matched: boolean;
+    confidence: "high" | "medium" | "low";
+    score: number;
+    reasons: string[];
+    candidate?: CrmProjectRecord;
+    normalized_project?: string;
+  };
+  applicant?: CrmUserRecord;
+  summary: string;
+}
+
 export interface WorkspaceResourceResult {
   provider: WorkspaceProvider;
   kind: WorkspaceResourceKind;

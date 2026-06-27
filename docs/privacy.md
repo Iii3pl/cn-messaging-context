@@ -10,6 +10,7 @@ The connector may process:
 - Message sender names or platform ids.
 - Message text, timestamps, and raw event payloads.
 - DingTalk OA approval titles, instance ids, task ids, records, and user-provided approval remarks.
+- Optional read-only CRM project, applicant, department, amount, and approval-preaudit evidence when CRM CLI access is explicitly enabled.
 - Feishu/Lark, DingTalk, and Tencent Docs workspace resource identifiers and user-requested document, sheet, base, or whiteboard content.
 - Audit records for read, sync, send, and approval actions.
 
@@ -24,6 +25,7 @@ The plugin package must not contain:
 - Refresh tokens.
 - Webhook signing secrets.
 - Tencent Docs OAuth/OpenAPI tokens, OpenID values, MCP tokens, cookies, or private keys.
+- CRM credentials, CRM cookies, or write-capable CRM tokens.
 - User cookies.
 - Private keys.
 

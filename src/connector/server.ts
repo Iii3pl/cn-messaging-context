@@ -12,6 +12,13 @@ import {
   sendMessageViaCli,
   syncHistoryFromCli
 } from "./adapters/cli.js";
+import {
+  checkCrmStatus,
+  getCrmProjectDetail,
+  lookupCrmUsers,
+  preauditApprovalWithCrm,
+  searchCrmProjects
+} from "./adapters/crm.js";
 import { checkIssueReporterStatus, reportConnectorIssue } from "./adapters/github-issues.js";
 import {
   checkWorkspaceStatus,
@@ -27,7 +34,7 @@ import { normalizeDingTalkEvent, normalizeFeishuEvent } from "./normalizers.js";
 import { rawBodySaver, verifyOptionalHmacSignature } from "./security.js";
 import { SqliteStore } from "./sqlite-store.js";
 import { JsonlStore, type MessageStore } from "./store.js";
-import type { MessageRecord, Platform, ScheduledActionRecord, WritablePlatform, WorkspaceProvider, WorkspaceResourceKind } from "../shared/types.js";
+import type { CrmApprovalPreauditRequest, MessageRecord, Platform, ScheduledActionRecord, WritablePlatform, WorkspaceProvider, WorkspaceResourceKind } from "../shared/types.js";
 
 const port = Number(process.env.PORT ?? 8787);
 const dataDir = process.env.CN_MESSAGING_DATA_DIR ?? path.resolve(process.cwd(), ".data");
@@ -826,6 +833,65 @@ app.get("/identities/resolve", asyncRoute(async (req, res) => {
   res.json({ value, mappings });
 }));
 
+app.get("/crm/status", asyncRoute(async (_req, res) => {
+  res.json({ crm: await checkCrmStatus() });
+}));
+
+app.get("/crm/projects/search", asyncRoute(async (req, res) => {
+  const query = requireString(req.query.query, "query");
+  const limit = optionalNumber(req.query.limit, 10);
+  const result = await searchCrmProjects({ query, limit });
+  await store.appendAudit({
+    action: "crm.project.search",
+    tenant_id: tenantId(req),
+    status: "read",
+    metadata: { query, count: result.projects.length }
+  });
+  res.json(result);
+}));
+
+app.get("/crm/projects/:project_id/detail", asyncRoute(async (req, res) => {
+  const projectId = requireString(req.params.project_id, "project_id");
+  const result = await getCrmProjectDetail(projectId);
+  await store.appendAudit({
+    action: "crm.project.detail",
+    tenant_id: tenantId(req),
+    status: "read",
+    metadata: { project_id: projectId }
+  });
+  res.json(result);
+}));
+
+app.get("/crm/users/lookup", asyncRoute(async (req, res) => {
+  const name = requireString(req.query.name, "name");
+  const limit = optionalNumber(req.query.limit, 5);
+  const result = await lookupCrmUsers({ name, limit });
+  await store.appendAudit({
+    action: "crm.user.lookup",
+    tenant_id: tenantId(req),
+    status: "read",
+    metadata: { name, count: result.users.length }
+  });
+  res.json(result);
+}));
+
+app.post("/approvals/preaudit/crm", asyncRoute(async (req, res) => {
+  const body = req.body as CrmApprovalPreauditRequest;
+  const result = await preauditApprovalWithCrm(body);
+  await store.appendAudit({
+    action: "approvals.crm.preaudit",
+    tenant_id: tenantId(req),
+    status: "read",
+    metadata: {
+      source: body.source,
+      approval_id: body.approval_id,
+      risk_level: result.risk_level,
+      recommendation: result.recommendation
+    }
+  });
+  res.json(result);
+}));
+
 app.get("/approvals/dingtalk/pending", asyncRoute(async (req, res) => {
   const limit = optionalNumber(req.query.limit, 20);
   const approvals = await listDingTalkPendingApprovals(limit);
@@ -888,6 +954,7 @@ app.get("/integrations/status", asyncRoute(async (_req, res) => {
   const conversations = await store.listConversations({});
   const cli = await checkCliStatus();
   const workspace = await checkWorkspaceStatus();
+  const crm = await checkCrmStatus();
   res.json({
     ok: true,
     platforms: {
@@ -907,6 +974,7 @@ app.get("/integrations/status", asyncRoute(async (_req, res) => {
         real_send: "not_supported"
       }
     },
+    crm,
     connector: {
       data_dir: dataDir,
       store_mode: store.mode,

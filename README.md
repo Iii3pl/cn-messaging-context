@@ -8,7 +8,7 @@ English | [中文](./README.zh-CN.md)
 - A stdio MCP server exposes bounded tools to Codex.
 - A separate connector service owns webhooks, token refresh, storage, search, and send adapters.
 
-This keeps long-running platform work out of Codex sessions while still letting Codex sync history, search, summarize, generate group-chat reports, create Slack-style daily digests, triage notifications, find reply candidates, draft reply queues, create summary documents, publish summaries to Feishu/Lark, DingTalk, or Tencent Docs resources, read/write docs/sheets/bases/whiteboards, read local WeChat sessions/history/search results through `wx-cli`, fall back to user-approved Feishu/Lark read permission when bot access is insufficient, read native mention/unread state, read native or topic-inferred threads, map cross-platform identities, run due schedule records, safely send confirmed messages, read or approve confirmed DingTalk OA items, and report connector errors as redacted GitHub Issues.
+This keeps long-running platform work out of Codex sessions while still letting Codex sync history, search, summarize, generate group-chat reports, create Slack-style daily digests, triage notifications, find reply candidates, draft reply queues, create summary documents, publish summaries to Feishu/Lark, DingTalk, or Tencent Docs resources, read/write docs/sheets/bases/whiteboards, read local WeChat sessions/history/search results through `wx-cli`, fall back to user-approved Feishu/Lark read permission when bot access is insufficient, read native mention/unread state, read native or topic-inferred threads, map cross-platform identities, run due schedule records, safely send confirmed messages, read or approve confirmed DingTalk OA items, run optional read-only CRM-backed approval preaudits, and report connector errors as redacted GitHub Issues.
 
 ## Structure
 
@@ -93,9 +93,16 @@ Set `CN_MESSAGING_STORE=sqlite` to use the production-style local SQLite store w
 - `get_dingtalk_approval_tasks`
 - `get_dingtalk_approval_records`
 - `approve_dingtalk_approval`
+- `check_crm_cli_status`
+- `search_crm_projects`
+- `get_crm_project_detail`
+- `lookup_crm_users`
+- `preaudit_approval_with_crm`
 - `check_integration_status`
 
 `send_message` and `approve_dingtalk_approval` require `confirmed_by_user: true` plus a human-readable confirmation summary. The skills also require Codex to show the platform, destination/action target, and exact outgoing text or approval remark before acting.
+
+CRM tools are local, read-only, and disabled by default. Enable them in trusted connector environments with `CN_MESSAGING_CRM_ENABLED=true`; approval preaudit treats missing CRM evidence as `unknown` or `warn`, never as automatic approval.
 
 ## Slack-Style Workflows
 

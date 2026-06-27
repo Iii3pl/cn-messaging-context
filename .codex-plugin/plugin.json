@@ -1,6 +1,6 @@
 {
   "name": "cn-messaging-context",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "description": "Read, summarize, triage, publish, safely act on Feishu/Lark, DingTalk, local WeChat, and Tencent Docs context, with one-command onboarding and issue reporting.",
   "author": {
     "name": "Wuliang"
@@ -23,7 +23,7 @@
   "interface": {
     "displayName": "Feishu / DingTalk Context",
     "shortDescription": "Search Chinese team chat context and handle safe DingTalk approvals.",
-    "longDescription": "Use Feishu/Lark, DingTalk, local WeChat, and Tencent Docs resources from a separate connector service to sync history, search messages, summarize recent context, generate Slack-style daily digests, publish summaries to docs/sheets/bases/whiteboards, guide new users through one-command Codex/WorkBuddy installation and platform CLI setup, ask before falling back to user-approved Feishu/Lark read permission, read local WeChat sessions/history/unread state through wx-cli, read native mention/unread state, identify reply candidates, draft reply queues, read native or topic-inferred threads, map cross-platform identities, run safe schedule workers, send user-confirmed Feishu/DingTalk messages, read or approve DingTalk OA items after explicit confirmation, and turn connector errors into redacted GitHub Issues.",
+    "longDescription": "Use Feishu/Lark, DingTalk, local WeChat, Tencent Docs, and optional read-only CRM CLI resources from a separate connector service to sync history, search messages, summarize recent context, generate Slack-style daily digests, publish summaries to docs/sheets/bases/whiteboards, guide new users through one-command Codex/WorkBuddy installation and platform CLI setup, ask before falling back to user-approved Feishu/Lark read permission, read local WeChat sessions/history/unread state through wx-cli, read native mention/unread state, identify reply candidates, draft reply queues, read native or topic-inferred threads, map cross-platform identities, run safe schedule workers, send user-confirmed Feishu/DingTalk messages, read or approve DingTalk OA items after explicit confirmation, run CRM-backed approval preaudits without taking action, and turn connector errors into redacted GitHub Issues.",
     "developerName": "Wuliang",
     "category": "Communication",
     "capabilities": [
@@ -45,6 +45,7 @@
       "检查并预览已经到时间的定时 digest 和消息",
       "每天 18:00 生成钉钉群聊 digest，先不要发送",
       "看看钉钉 OA 有哪些待审批，先不要通过",
+      "用 CRM 证据预审这条审批，先不要通过",
       "把今天的群聊摘要发布到飞书文档，先确认再写入",
       "把这份摘要追加到钉钉在线表格",
       "读取腾讯文档里的在线表格数据并总结",

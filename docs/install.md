@@ -92,6 +92,9 @@ In plain language: this starts the small local helper service that Codex talks t
 | `CN_MESSAGING_DRY_RUN` | `true` | Friendly meaning: preview first, do not really send or approve yet |
 | `CN_WORKSPACE_DRY_RUN` | `true` | Friendly meaning: preview first, do not really write documents or sheets yet |
 | `CN_MESSAGING_ENFORCE_AUTH` | `false` | Set to `true` to require conversation authorization records |
+| `CN_MESSAGING_CRM_ENABLED` | `false` | Enables optional read-only CRM CLI tools and CRM approval preaudit |
+| `CN_MESSAGING_CRM_CLI` | `crm` | CRM CLI command name or absolute path |
+| `CN_MESSAGING_CRM_TIMEOUT_MS` | `20000` | Timeout for each CRM CLI read call |
 | `CN_MESSAGING_GITHUB_ISSUES_REPO` | `Iii3pl/cn-messaging-context` | GitHub repo for redacted connector error reports |
 | `CN_MESSAGING_AUTO_ISSUES` | `false` | Friendly meaning: when enabled, connector errors are automatically prepared for GitHub |
 | `CN_MESSAGING_ISSUE_DRY_RUN` | `true` | Friendly meaning: preview the GitHub problem report without creating a real Issue |

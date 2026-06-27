@@ -10,6 +10,7 @@ const writablePlatformSchema = z.enum(["feishu", "dingtalk"]);
 const workspaceProviderSchema = z.enum(["feishu", "dingtalk", "tencent"]);
 const workspaceKindSchema = z.enum(["doc", "sheet", "base", "whiteboard", "slide", "smartcanvas", "smartsheet", "board", "mind", "flowchart"]);
 const accessIdentitySchema = z.enum(["auto", "bot", "user"]);
+const approvalPreauditSourceSchema = z.enum(["dingtalk", "cmb_xft", "external"]);
 const timestampSchema = z.string().min(1);
 
 async function connectorRequest(path: string, init?: RequestInit): Promise<unknown> {
@@ -805,6 +806,81 @@ server.registerTool(
       })
     );
   }
+);
+
+server.registerTool(
+  "check_crm_cli_status",
+  {
+    title: "Check CRM CLI status",
+    description: "Check whether read-only CRM CLI access is enabled and available to the connector.",
+    inputSchema: {}
+  },
+  async () => textResult(await connectorRequest("/crm/status"))
+);
+
+server.registerTool(
+  "search_crm_projects",
+  {
+    title: "Search CRM projects",
+    description: "Read-only CRM project search by keyword. Requires CN_MESSAGING_CRM_ENABLED=true in the connector environment.",
+    inputSchema: {
+      query: z.string().min(1),
+      limit: z.number().int().min(1).max(50).default(10)
+    }
+  },
+  async (args) => textResult(await connectorRequest(appendQuery("/crm/projects/search", args)))
+);
+
+server.registerTool(
+  "get_crm_project_detail",
+  {
+    title: "Get CRM project detail",
+    description: "Read-only CRM project detail lookup by CRM project id.",
+    inputSchema: {
+      project_id: z.union([z.string(), z.number()])
+    }
+  },
+  async (args) => textResult(await connectorRequest(`/crm/projects/${encodeURIComponent(String(args.project_id))}/detail`))
+);
+
+server.registerTool(
+  "lookup_crm_users",
+  {
+    title: "Lookup CRM users",
+    description: "Read-only CRM organization user lookup by display name.",
+    inputSchema: {
+      name: z.string().min(1),
+      limit: z.number().int().min(1).max(50).default(5)
+    }
+  },
+  async (args) => textResult(await connectorRequest(appendQuery("/crm/users/lookup", args)))
+);
+
+server.registerTool(
+  "preaudit_approval_with_crm",
+  {
+    title: "Preaudit approval with CRM",
+    description: "Run read-only CRM evidence checks for an approval payload. This never sends or approves anything.",
+    inputSchema: {
+      source: approvalPreauditSourceSchema.optional(),
+      approval_id: z.string().optional(),
+      title: z.string().optional(),
+      process_name: z.string().optional(),
+      amount: z.number().optional(),
+      applicant: z.string().optional(),
+      department: z.string().optional(),
+      project: z.string().optional(),
+      project_refs: z.array(z.string()).optional(),
+      raw_detail: z.unknown().optional()
+    }
+  },
+  async (args) =>
+    textResult(
+      await connectorRequest("/approvals/preaudit/crm", {
+        method: "POST",
+        body: JSON.stringify(args)
+      })
+    )
 );
 
 server.registerTool(
