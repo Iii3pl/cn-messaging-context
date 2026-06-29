@@ -1,71 +1,242 @@
 ---
 name: approval-workflow
-description: Read DingTalk OA approvals and approve only after explicit user confirmation.
+description: |
+  统一的审批工作流 skill：支持钉钉 OA 审批和薪福通（CMB XFT）审批。
+  当用户询问审批列表、待审批、审批详情、通过/拒绝审批时使用。
+  触发词：我的审批列表、待审批、钉钉审批、薪福通审批、CMB审批、XFT审批、审批通过、同意审批、拒绝审批。
 ---
 
-# DingTalk OA Approval Workflow
+# 审批工作流 Skill
 
-Use this skill when the user asks about DingTalk OA approvals, pending approvals, approval details, approval records, task ids, or approving an item.
+统一的审批处理入口，支持：
+1. **钉钉 OA 审批** - 通过 DWS CLI 或 MCP 工具
+2. **薪福通审批** - 通过 opencli 浏览器自动化
 
-## Read Workflow
+## 快速开始
 
-1. Call `list_pending_dingtalk_approvals` for pending items.
-2. For any item the user might act on, call `get_dingtalk_approval_detail`, `get_dingtalk_approval_tasks`, and `get_dingtalk_approval_records`.
-3. Keep these facts separate:
-   - pending-list membership
-   - workflow status
-   - task id
-   - approval records
-   - whether the current account can act
-4. If the records or workflow state disagree with the pending list, report the disagreement and do not approve.
+### 查看待审批列表
 
-## Optional CRM Preaudit
+```bash
+# 钉钉 OA 审批
+python3 ${HERMES_HOME}/skills/openclaw-imports/dingtalk-approval-exec/scripts/fast_dws_approval.py list
 
-When an approval has project, customer, applicant, amount, department, reimbursement, supplier settlement, purchase, or contract context, and CRM access is enabled, call `preaudit_approval_with_crm` before recommending action. Use the CRM result only as read-only evidence:
-
-- Treat `risk_level=green` as "no obvious CRM issue found", not as permission to approve.
-- Treat `unknown` or `warn` checks as items for the user to review.
-- Never fabricate missing CRM project or applicant data.
-- Do not approve based only on CRM preaudit; the regular task/record confirmation and explicit user confirmation are still required.
-
-## How To Explain It To People
-
-Use plain workplace language in the final answer. Avoid exposing internal words such as `RUNNING`, `taskId`, `instance_id`, `PARAM_ERROR`, `saNode`, `127.0.0.1`, or `dry-run` unless the user explicitly asks for debugging detail.
-
-Prefer this shape:
-
-```md
-今天还有 <N> 个钉钉审批需要你看。
-
-1. <审批标题>
-   - 谁提交的：<人名，如果能看出>
-   - 现在到哪一步：<还在审批中 / 已有几个人同意 / 等你处理>
-   - 我能确认的证据：<待审批列表里还在；审批流水显示...>
-
-说明：插件的小服务刚才没开，所以我直接查了钉钉。结果是实时查到的；只是钉钉详情接口有一部分字段返回不规整，不影响这条是否在待审批列表里的判断。
+# 薪福通审批
+node ${XFT_SKILL_HOME}/scripts/navigate.mjs homepage
 ```
 
-When connector service status matters, say "插件的小服务没开" instead of "127.0.0.1:8787 failed". When a detail endpoint fails but list/tasks/records work, say "详情页有一部分字段读不出来，但待审批名单和审批流水能确认" instead of showing raw error strings.
+### 执行审批
 
-## Approval Safety
-
-Before approving, Codex must show:
-
-```md
-Approval: <title or instance id>
-Instance ID: <instance_id>
-Task ID: <task_id>
-Remark:
-<exact remark>
+**钉钉 OA：**
+```bash
+# 通过指定审批
+python3 ${HERMES_HOME}/skills/openclaw-imports/dingtalk-approval-exec/scripts/fast_dws_approval.py approve --indices 1 --remark "同意"
 ```
 
-Then wait for direct confirmation such as "确认通过这个审批".
+**薪福通：**
+```bash
+# 审核 + 执行
+node ${XFT_SKILL_HOME}/scripts/review.mjs --batch
+node ${XFT_SKILL_HOME}/scripts/approve.mjs <billId> agree "同意"
+```
 
-Call `approve_dingtalk_approval` only when:
+## 配置
 
-- The user explicitly confirmed the exact approval.
-- `task_id` is present from `get_dingtalk_approval_tasks`.
-- The remark is exact and visible to the user.
-- `confirmed_by_user` is true.
+### 环境变量
 
-Never batch-approve multiple items unless the user reviewed and confirmed every item and remark.
+创建 `.env` 文件（参考 `.env.example`）：
+
+```bash
+# 钉钉配置
+DINGTALK_USER_ID=your_user_id
+DINGTALK_USER_NAME=your_name
+
+# 薪福通配置
+XFT_SESSION_NAME=your_opencli_session_name
+XFT_DB_PATH=~/.hermes/data/cmb_approvals.db
+
+# Hermes 主目录（可选，默认：~/.hermes）
+HERMES_HOME=~/.hermes
+```
+
+### 钉钉审批配置
+
+1. 安装 DWS CLI：`npm install -g @openclaw/dws`
+2. 登录：`dws auth login`
+3. 验证：`dws auth status`
+
+### 薪福通审批配置
+
+1. 安装 opencli：`npm install -g opencli`
+2. 启动 daemon：`opencli daemon start`
+3. 登录薪福通：在 Chrome 中访问 `https://xft.cmbchina.com` 并登录
+
+## 使用指南
+
+### 钉钉 OA 审批
+
+#### 1. 查看待审批
+
+```bash
+python3 ${HERMES_HOME}/skills/openclaw-imports/dingtalk-approval-exec/scripts/fast_dws_approval.py list
+```
+
+输出示例：
+```
+Found 3 pending approvals:
+
+#1 林虹提交的 offer审批（人力专用）
+   Status: RUNNING
+   Instance ID: 30ezX-bCSpiaKrd9ucfpqg05091782704486
+
+#2 李馨月提交的付费软件或平台申请单
+   Status: RUNNING
+   Instance ID: jScxOnW3SmOJR2me-Bzenw05091782202422
+```
+
+#### 2. 执行审批
+
+```bash
+# 通过单条
+python3 ${HERMES_HOME}/skills/openclaw-imports/dingtalk-approval-exec/scripts/fast_dws_approval.py approve --indices 1 --remark "同意"
+
+# 批量通过
+python3 ${HERMES_HOME}/skills/openclaw-imports/dingtalk-approval-exec/scripts/fast_dws_approval.py approve --all --remark "同意"
+```
+
+#### 3. 转交审批
+
+```bash
+# 先获取转交目标的用户 ID
+dws contact user search --keyword "王玉晶"
+
+# 转交
+dws oa approval redirect-task --task-id <taskId> --to-actioner-id <userId> --remark "转交审批"
+```
+
+### 薪福通审批
+
+#### 1. 查看待审批列表
+
+```bash
+node ${XFT_SKILL_HOME}/scripts/navigate.mjs homepage
+```
+
+#### 2. 审核分析
+
+```bash
+# 批量审核
+node ${XFT_SKILL_HOME}/scripts/review.mjs --batch
+
+# 单笔审核
+node ${XFT_SKILL_HOME}/scripts/review.mjs <billId>
+```
+
+审核输出包含：
+- 风险标记（riskFlags）
+- 建议（suggestion）
+- 审批链
+- 发票明细
+- 费用拆分
+
+#### 3. 执行审批
+
+```bash
+# 详细模式（打开详情页）
+node ${XFT_SKILL_HOME}/scripts/approve.mjs <billId> agree "同意"
+
+# 快速模式（行级按钮，默认 dry-run）
+node ${XFT_SKILL_HOME}/scripts/fast-approve.mjs --ids <billId> --dry-run
+
+# 真实执行
+node ${XFT_SKILL_HOME}/scripts/fast-approve.mjs --ids <billId> --yes
+```
+
+## 高级功能
+
+### 钉钉审批
+
+#### 审批安全规则
+
+**执行前必须：**
+1. 重新拉取当前列表（不使用缓存）
+2. 定位用户的 taskId（`userId` + `taskStatus=RUNNING`）
+3. 展示审批详情并获得用户明确授权
+
+**禁止：**
+- 批量盲批（必须逐条或用户明确授权）
+- 使用缓存的 taskId
+- 仅凭 `processInstanceResult=agree` 判定为可跳过
+
+#### 已知问题处理
+
+**DWS CLI 路径：**
+- `dws oa approval detail` 可能返回 PARAM_ERROR（部分审批类型）
+- 降级到 MCP 工具或 ts-node 脚本
+
+**MCP 路径：**
+- `get_processInstance_detail` 不返回 `activityId`
+- 需要并行会签判定时，降级到 ts-node
+
+### 薪福通审批
+
+#### Session 自愈
+
+```bash
+# 健康检查
+node ${XFT_SKILL_HOME}/scripts/health-check.mjs
+
+# 自动自愈
+node ${XFT_SKILL_HOME}/scripts/self-heal.mjs
+```
+
+#### 数据库查询
+
+```bash
+# 查看审批记录
+sqlite3 ${XFT_DB_PATH} "SELECT * FROM approvals ORDER BY approved_at DESC LIMIT 20;"
+```
+
+## 故障排查
+
+### 钉钉审批
+
+**问题：** `list-pending` 返回 0 但页面有审批
+**解决：** 
+1. 检查 DWS auth：`dws auth status`
+2. 交叉验证：`dws oa approval list-pending --format json`
+3. 可能是接口盲区，建议用户在钉钉 App 处理
+
+**问题：** `approve` 返回 `success=false`
+**解决：**
+1. 重新拉取详情，定位正确的 taskId
+2. 检查是否为并行会签节点
+3. 降级到 `dws oa approval approve --task-id <tid>`
+
+### 薪福通审批
+
+**问题：** `navigate.mjs` 返回 0 条
+**解决：**
+1. 检查 session：`opencli browser <session> eval "document.title"`
+2. 如果 `about:blank`，重新打开页面
+3. 运行自愈：`node scripts/self-heal.mjs`
+
+**问题：** 审批点击后未生效
+**解决：**
+1. 检查是否需要两步确认（通过 → 确认）
+2. 验证 DB 记录：`sqlite3 ${XFT_DB_PATH} "SELECT * FROM approvals WHERE bill_id='<id>'"`
+3. 查看 `clickVerified` 字段
+
+## 参考资料
+
+- 钉钉审批详细文档：`references/dingtalk-approval.md`
+- 薪福通审批详细文档：`cmb-xft-approval/SKILL.md`
+- 故障排查：`references/troubleshooting.md`
+
+## 贡献
+
+欢迎提交 Issue 和 Pull Request！
+
+提交前请确保：
+1. 移除所有硬编码的个人路径
+2. 使用环境变量或配置文件
+3. 更新相关文档
