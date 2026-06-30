@@ -758,6 +758,18 @@ server.registerTool(
 );
 
 server.registerTool(
+  "get_dingtalk_approval_detail_raw",
+  {
+    title: "Get DingTalk approval detail (raw API)",
+    description: "Read DingTalk OA approval detail via raw OpenAPI call (oapi.dingtalk.com). Use this as fallback when get_dingtalk_approval_detail returns saNode parse error. Requires app credentials with qyapi_aflow permission.",
+    inputSchema: {
+      instance_id: z.string()
+    }
+  },
+  async (args) => textResult(await connectorRequest(`/approvals/dingtalk/${encodeURIComponent(args.instance_id)}/detail/raw`))
+);
+
+server.registerTool(
   "get_dingtalk_approval_tasks",
   {
     title: "Get DingTalk approval tasks",

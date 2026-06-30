@@ -97,13 +97,38 @@ export async function getDingTalkApprovalDetail(instanceId: string): Promise<unk
   } catch (error) {
     const recovered = recoverDwsExpPayload(error);
     if (recovered) {
+      const warning = "dws_detail_returned_business_error_but_expPayload_was_recovered";
+      const isSaNodeError = isSaNodeParseError(error);
       return {
-        warning: "dws_detail_returned_business_error_but_expPayload_was_recovered",
+        warning,
+        _saNode_parse_error: isSaNodeError,
+        _fallback_hint: isSaNodeError
+          ? "Use get_dingtalk_approval_detail_raw for full form_component_values. Requires app credentials with qyapi_aflow permission."
+          : undefined,
         recovered
       };
     }
     throw error;
   }
+}
+
+/**
+ * Fallback for when dws oa approval detail fails with saNode parse error.
+ * Calls the DingTalk old OpenAPI (oapi.dingtalk.com) directly via dws api.
+ * Requires: dws auth login with app credentials (AppKey+AppSecret) and qyapi_aflow permission.
+ */
+export async function getDingTalkApprovalDetailRaw(instanceId: string): Promise<unknown> {
+  return runJson("dws", [
+    "api",
+    "POST",
+    "/topapi/processinstance/get",
+    "--base-url",
+    "https://oapi.dingtalk.com",
+    "--data",
+    JSON.stringify({ process_instance_id: instanceId }),
+    "--format",
+    "json"
+  ]);
 }
 
 export async function getDingTalkApprovalTasks(instanceId: string): Promise<unknown> {
@@ -461,6 +486,11 @@ function improveDingTalkHistoryError(error: unknown, args: string[]): Error {
     return new Error("钉钉群消息同步用了旧的全局历史命令。请升级 cn-messaging-context；新版会用 `dws chat message list --group <群ID>` 读取指定群。");
   }
   return error instanceof Error ? error : new Error(message);
+}
+
+function isSaNodeParseError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /saNode\s+parse\s+output\s+error/i.test(message);
 }
 
 function recoverDwsExpPayload(error: unknown): unknown | undefined {

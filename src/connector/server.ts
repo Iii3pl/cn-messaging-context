@@ -4,6 +4,7 @@ import {
   approveDingTalkApproval,
   checkCliStatus,
   getDingTalkApprovalDetail,
+  getDingTalkApprovalDetailRaw,
   getDingTalkApprovalRecords,
   getDingTalkApprovalTasks,
   listWechatSessions,
@@ -908,6 +909,12 @@ app.get("/approvals/dingtalk/pending", asyncRoute(async (req, res) => {
 app.get("/approvals/dingtalk/:instance_id/detail", asyncRoute(async (req, res) => {
   const instanceId = requireString(req.params.instance_id, "instance_id");
   const detail = await getDingTalkApprovalDetail(instanceId);
+  res.json({ instance_id: instanceId, detail });
+}));
+
+app.get("/approvals/dingtalk/:instance_id/detail/raw", asyncRoute(async (req, res) => {
+  const instanceId = requireString(req.params.instance_id, "instance_id");
+  const detail = await getDingTalkApprovalDetailRaw(instanceId);
   res.json({ instance_id: instanceId, detail });
 }));
 

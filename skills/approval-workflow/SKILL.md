@@ -170,8 +170,33 @@ node ${XFT_SKILL_HOME}/scripts/fast-approve.mjs --ids <billId> --yes
 #### 已知问题处理
 
 **DWS CLI 路径：**
-- `dws oa approval detail` 可能返回 PARAM_ERROR（部分审批类型）
-- 降级到 MCP 工具或 ts-node 脚本
+- `dws oa approval detail` 可能返回 PARAM_ERROR（部分审批类型，如采购申请表单组件类型不兼容导致 `saNode parse output error`）
+- 降级方案：使用 `dws api` 直调钉钉旧版 OpenAPI (`oapi.dingtalk.com`)，绕过 MCP 解析层
+
+**saNode parse error 降级方案：**
+
+当 `dws oa approval detail --instance-id <id>` 返回以下错误时：
+```
+saNode parse output error
+```
+
+改用 `dws api` 直调获取完整表单数据（包括 `form_component_values`）：
+
+```bash
+dws api POST "/topapi/processinstance/get" \
+  --base-url "https://oapi.dingtalk.com" \
+  --data '{"process_instance_id":"<id>"}' \
+  --format json
+```
+
+前置条件：
+1. 钉钉应用拥有 **OA审批 (`qyapi_aflow`)** 权限
+2. 使用应用凭证登录：`dws auth login --client-id <AppKey> --client-secret <AppSecret> --yes`
+
+解析脚本（提取采购明细、附件、金额等）：
+```bash
+dws api POST "/topapi/processinstance/get" ... | python3 scripts/parse_dingtalk_detail.py
+```
 
 **MCP 路径：**
 - `get_processInstance_detail` 不返回 `activityId`
