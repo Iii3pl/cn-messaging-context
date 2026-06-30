@@ -35,6 +35,20 @@
 - 新增 `references/sysexits-handling.md`（退出码处理 + 旧/新对比）
 - SKILL.md 关键章节已同步更新
 
+## v3.2 (2026-06-30)
+
+### 新增：直达审批模式
+
+- **`scripts/direct-approve.mjs`** — 跳过列表页导航，直接构造详情页 URL 打开审批视口
+  - URL 公式：`?billId=XXX&viewType=APPROVE_PEND&reserveTab=true`
+  - 按钮定位简化：`ant-btn-primary` + 文本「通过」→ 弹窗「确认」
+  - 支持 `--ids` 批量 + `--yes` 执行，默认 dry-run
+  - **18 单实战验证**：比 fast-approve（行级按钮）更快、幽灵单据无需预处理
+- **`references/2026-06-30-direct-approve-pattern.md`** — 直达模式 vs 行级模式对比分析
+
+### 文档
+- SKILL.md 新增 §5.1「直达审批」章节，架构图已同步
+
 ## v3.0 (2026-06-22)
 
 - 引入 `scripts/shared/opencli.mjs` 统一 OpenCLI 包解析
